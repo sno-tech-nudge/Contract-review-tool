@@ -5,6 +5,8 @@ import { ingestFile } from "@/lib/contracts/ingest";
 import { readFile } from "@/lib/storage";
 import type { ContractType } from "@/lib/contracts/types";
 
+export const maxDuration = 60;
+
 // Files a reviewed contract into the repository so future reviews learn from it.
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

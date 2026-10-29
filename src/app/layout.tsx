@@ -3,6 +3,8 @@ import Link from "next/link";
 import { NavLinks } from "@/components/NavLinks";
 import { ToastProvider } from "@/components/Toast";
 import { aiEnabled } from "@/lib/ai/claude";
+import { authEnabled } from "@/lib/auth";
+import { LogOut } from "lucide-react";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -27,6 +29,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <span className="dot" aria-hidden />
                 {aiEnabled() ? "AI review on" : "Rule checks only"}
               </span>
+              {authEnabled() && (
+                <form method="post" action="/api/auth/logout">
+                  <button className="btn btn--ghost btn--icon" type="submit" aria-label="Sign out" title="Sign out">
+                    <LogOut />
+                  </button>
+                </form>
+              )}
             </div>
           </header>
           {children}

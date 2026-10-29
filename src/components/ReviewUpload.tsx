@@ -4,10 +4,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, CircleAlert, FileUp } from "lucide-react";
 import { CONTRACT_TYPES, CONTRACT_TYPE_KEYS } from "@/lib/contracts/types";
+import { sendContract } from "@/lib/upload-client";
 
 const ACCEPT = ".pdf,.docx,.txt";
 
-export function ReviewUpload({ repositoryCount, legalRuleCount }: { repositoryCount: number; legalRuleCount: number }) {
+export function ReviewUpload({ repositoryCount, legalRuleCount, directUpload }: { repositoryCount: number; legalRuleCount: number; directUpload: boolean }) {
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -38,11 +39,8 @@ export function ReviewUpload({ repositoryCount, legalRuleCount }: { repositoryCo
       if (!/\.(pdf|docx|txt)$/i.test(file.name)) return setError("Please upload a PDF, Word (.docx) or text file.");
       if (file.size > 25 * 1024 * 1024) return setError("Files must be 25 MB or smaller.");
       setBusy(file.name);
-      const body = new FormData();
-      body.append("file", file);
-      if (contractType) body.append("contractType", contractType);
       try {
-        const res = await fetch("/api/reviews", { method: "POST", body });
+        const res = await sendContract("/api/reviews", file, contractType ? { contractType } : {}, directUpload);
         const json = await res.json();
         if (!res.ok) throw new Error(json.error ?? "Upload failed.");
         setStep(steps.length);
@@ -52,7 +50,7 @@ export function ReviewUpload({ repositoryCount, legalRuleCount }: { repositoryCo
         setError(e instanceof Error ? e.message : "Upload failed.");
       }
     },
-    [contractType, router, steps.length]
+    [contractType, directUpload, router, steps.length]
   );
 
   return (

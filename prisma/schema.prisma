@@ -1,12 +1,14 @@
-// Local development runs on SQLite. To move to hosted Postgres (e.g. Supabase),
-// change the provider to "postgresql" and update DATABASE_URL.
+// Postgres everywhere. On Vercel, DATABASE_URL is the pooled connection used
+// at runtime and DIRECT_URL the direct one used for migrations. Locally,
+// `npx prisma dev` provides a Postgres and both point at it.
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // One uploaded file. REPOSITORY documents form the knowledge base that reviews

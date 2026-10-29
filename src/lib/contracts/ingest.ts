@@ -1,6 +1,6 @@
 import { prisma } from "../db";
 import { extractText, mimeFor } from "../extract";
-import { saveFile } from "../storage";
+import { deleteFile, saveFile } from "../storage";
 import { DocText } from "../text/locate";
 import { detectContractType } from "./classify";
 import { segment } from "./segment";
@@ -13,6 +13,7 @@ export type IngestOptions = {
   counterparty?: string;
   tags?: string;
   isTemplate?: boolean;
+  storageKey?: string; // set when the file is already in storage (direct browser upload)
 };
 
 export class IngestError extends Error {}
@@ -26,6 +27,16 @@ export function titleFromFileName(fileName: string): string {
 }
 
 export async function ingestFile(buffer: Buffer, fileName: string, opts: IngestOptions) {
+  try {
+    return await ingest(buffer, fileName, opts);
+  } catch (err) {
+    // don't leave an orphaned upload behind when the file can't be used
+    if (opts.storageKey) await deleteFile(opts.storageKey).catch(() => {});
+    throw err;
+  }
+}
+
+async function ingest(buffer: Buffer, fileName: string, opts: IngestOptions) {
   const mimeType = mimeFor(fileName);
   if (!mimeType) throw new IngestError("Only PDF, Word (.docx) and plain text files are supported.");
 
@@ -37,7 +48,7 @@ export async function ingestFile(buffer: Buffer, fileName: string, opts: IngestO
 
   const detected = detectContractType(doc.full);
   const segments = segment(doc);
-  const storageKey = await saveFile(buffer, fileName);
+  const storageKey = opts.storageKey ?? (await saveFile(buffer, fileName, mimeType));
 
   return prisma.document.create({
     data: {

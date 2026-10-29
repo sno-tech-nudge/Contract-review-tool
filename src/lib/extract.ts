@@ -47,7 +47,15 @@ async function extractPdf(buffer: Buffer): Promise<Extracted> {
   return { pages, pageCount: pdf.numPages };
 }
 
+// Postgres text columns reject NUL characters, which some PDFs contain.
+const clean = (pages: string[]) => pages.map((p) => p.replace(/\u0000/g, ""));
+
 export async function extractText(buffer: Buffer, mimeType: string): Promise<Extracted> {
+  const { pages, pageCount } = await extractRaw(buffer, mimeType);
+  return { pages: clean(pages), pageCount };
+}
+
+async function extractRaw(buffer: Buffer, mimeType: string): Promise<Extracted> {
   if (mimeType === "application/pdf") return extractPdf(buffer);
   if (mimeType === ACCEPTED_TYPES[".docx"]) {
     const { value } = await mammoth.extractRawText({ buffer });

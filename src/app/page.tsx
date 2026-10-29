@@ -6,6 +6,7 @@ import { LEGAL_RULES } from "@/lib/checks/legal/rules";
 import type { ReviewResult } from "@/lib/review/types";
 import { ReviewUpload } from "@/components/ReviewUpload";
 import { RiskPill, formatDate } from "@/components/ui";
+import { blobEnabled } from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,7 @@ export default async function Home() {
           <p className="lead" style={{ marginBottom: "var(--space-6)" }}>
             Each contract is checked three ways: against the wording in our repository, against the laws that govern Indian non-profits, and against our own business rules.
           </p>
-          <ReviewUpload repositoryCount={repositoryCount} legalRuleCount={LEGAL_RULES.length} />
+          <ReviewUpload repositoryCount={repositoryCount} legalRuleCount={LEGAL_RULES.length} directUpload={blobEnabled()} />
         </section>
 
         <aside style={{ paddingTop: "var(--space-7)" }}>

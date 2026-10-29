@@ -441,6 +441,13 @@ button.term__value:hover { text-decoration-color: var(--brown-700); }
 .chip { border: 1px solid var(--border); background: var(--surface-card); border-radius: 999px; padding: 0.35em 0.8em; font-size: var(--text-xs); color: var(--text-muted); cursor: pointer; }
 .chip[aria-pressed="true"] { background: var(--brown-700); border-color: var(--brown-700); color: white; }
 
+/* ---------- sign in ---------- */
+.login { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: var(--space-5); background: var(--surface); }
+.login__card { width: min(400px, 100%); display: flex; flex-direction: column; gap: var(--space-4); padding: var(--space-7) var(--space-6); background: var(--surface-card); border: 1px solid var(--rule); border-top: 1.5px solid var(--rule-strong); border-radius: var(--radius-sm); box-shadow: var(--shadow-md); }
+.login__logo { height: 20px; width: auto; align-self: flex-start; margin-bottom: var(--space-3); }
+.login__title { font-size: var(--text-xl); margin: calc(-1 * var(--space-3)) 0 0; }
+.login .btn { margin-top: var(--space-2); }
+
 /* ---------- report (print) ---------- */
 .report { max-width: 860px; margin: 0 auto; padding: var(--space-7) var(--space-6); background: white; }
 .report h1 { font-size: var(--text-2xl); margin: var(--space-2) 0; }
@@ -470,7 +477,7 @@ button.term__value:hover { text-decoration-color: var(--brown-700); }
 }
 @media (max-width: 720px) {
   .nav { padding: 0 var(--space-4); gap: var(--space-3); }
-  .nav__product, .nav__end { display: none; }
+  .nav__product, .nav__end .badge { display: none; }
   .nav__links { gap: var(--space-4); margin-left: auto; min-width: 0; }
   .nav__link span { display: none; }
   .page { padding: var(--space-5) var(--space-4) var(--space-8); }

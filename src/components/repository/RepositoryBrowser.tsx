@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BadgeCheck, CircleAlert, CircleCheck, Folder, FolderOpen, LayoutGrid, List, Search, Star, Upload, X } from "lucide-react";
 import { CONTRACT_TYPES, CONTRACT_TYPE_KEYS, contractTypeLabel } from "@/lib/contracts/types";
 import { extOf, formatDate, formatSize } from "@/components/ui";
+import { sendContract } from "@/lib/upload-client";
 
 export type RepoDoc = {
   id: string;
@@ -26,7 +27,7 @@ type UploadItem = { key: string; name: string; state: "queued" | "uploading" | "
 
 const ACCEPTED = /\.(pdf|docx|txt)$/i;
 
-export function RepositoryBrowser({ docs }: { docs: RepoDoc[] }) {
+export function RepositoryBrowser({ docs, directUpload }: { docs: RepoDoc[]; directUpload: boolean }) {
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
   const [folder, setFolder] = useState<string>("all");
@@ -66,12 +67,11 @@ export function RepositoryBrowser({ docs }: { docs: RepoDoc[] }) {
       for (let i = 0; i < files.length; i++) {
         if (items[i].state === "error") continue;
         update(items[i].key, { state: "uploading" });
-        const body = new FormData();
-        body.append("file", files[i]);
-        if (folder !== "all" && folder !== "templates") body.append("contractType", folder);
-        if (folder === "templates") body.append("isTemplate", "true");
+        const fields: Record<string, string> = {};
+        if (folder !== "all" && folder !== "templates") fields.contractType = folder;
+        if (folder === "templates") fields.isTemplate = "true";
         try {
-          const res = await fetch("/api/repository", { method: "POST", body });
+          const res = await sendContract("/api/repository", files[i], fields, directUpload);
           const json = await res.json();
           if (!res.ok) throw new Error(json.error ?? "Upload failed");
           update(items[i].key, { state: "done", id: json.id, contractType: json.contractType, isTemplate: folder === "templates" });
@@ -81,7 +81,7 @@ export function RepositoryBrowser({ docs }: { docs: RepoDoc[] }) {
       }
       router.refresh();
     },
-    [folder, router]
+    [directUpload, folder, router]
   );
 
   // Dropping files anywhere on the page adds them.

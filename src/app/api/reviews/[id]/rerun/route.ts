@@ -4,6 +4,8 @@ import { jsonError } from "@/lib/api";
 import { CONTRACT_TYPE_KEYS, type ContractType } from "@/lib/contracts/types";
 import { runReview } from "@/lib/review/run";
 
+export const maxDuration = 60;
+
 // Re-run the checks, optionally with a corrected contract type.
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

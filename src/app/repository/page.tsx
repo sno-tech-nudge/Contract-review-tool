@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { RepositoryBrowser } from "@/components/repository/RepositoryBrowser";
+import { blobEnabled } from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Repository · Contract review" };
@@ -26,6 +27,7 @@ export default async function RepositoryPage() {
 
   return (
     <RepositoryBrowser
+      directUpload={blobEnabled()}
       docs={docs.map((d) => ({
         id: d.id,
         title: d.title,
