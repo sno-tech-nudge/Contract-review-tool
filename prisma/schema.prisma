@@ -1,0 +1,94 @@
+// Local development runs on SQLite. To move to hosted Postgres (e.g. Supabase),
+// change the provider to "postgresql" and update DATABASE_URL.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// One uploaded file. REPOSITORY documents form the knowledge base that reviews
+// are measured against; REVIEW documents are contracts people upload to be checked.
+model Document {
+  id           String   @id @default(cuid())
+  kind         String // REPOSITORY | REVIEW
+  title        String
+  fileName     String
+  mimeType     String
+  size         Int
+  storageKey   String
+  contractType String // see CONTRACT_TYPES in src/lib/contracts/types.ts
+  counterparty String   @default("")
+  tags         String   @default("") // semicolon-joined
+  isTemplate   Boolean  @default(false) // approved boilerplate, weighted higher when comparing
+  notes        String   @default("")
+  pageCount    Int      @default(0)
+  text         String   @default("")
+  pagesJson    String   @default("[]") // string[] of per-page text
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  clauses Clause[]
+  reviews Review[]
+
+  @@index([kind, contractType])
+}
+
+model Clause {
+  id         String @id @default(cuid())
+  documentId String
+  position   Int
+  heading    String
+  text       String
+  clauseType String
+  page       Int    @default(1)
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([clauseType])
+  @@index([documentId])
+}
+
+model Review {
+  id           String   @id @default(cuid())
+  documentId   String
+  status       String   @default("COMPLETE") // COMPLETE | FAILED
+  contractType String
+  riskScore    Int      @default(0) // 0 (clean) to 100 (high risk)
+  resultJson   String   @default("{}") // ReviewResult, see src/lib/review/types.ts
+  createdAt    DateTime @default(now())
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+}
+
+// Organisation-specific checks, configured from the rules page.
+model BusinessRule {
+  id          String   @id @default(cuid())
+  name        String
+  description String   @default("")
+  kind        String // REQUIRE_PHRASE | FORBID_PHRASE | REQUIRE_CLAUSE | MAX_DAYS | MAX_AMOUNT
+  pattern     String   @default("") // phrases separated by ";" or a clause type
+  threshold   Float?
+  severity    String   @default("medium")
+  appliesTo   String   @default("") // semicolon-joined contract types, empty = all
+  guidance    String   @default("")
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// Lets people switch individual built-in legal rules off.
+model LegalRuleSetting {
+  ruleId  String  @id
+  enabled Boolean @default(true)
+}
+
+// Small key/value store for one-off app state (e.g. starter rules seeded).
+model Meta {
+  key   String @id
+  value String
+}
