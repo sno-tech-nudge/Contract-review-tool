@@ -44,15 +44,13 @@ Optional: set `ANTHROPIC_API_KEY` in `.env` to have Claude add a plain-language 
 The app is ready for Vercel: Postgres for data, a private Vercel Blob store for the contract files, and a shared team password.
 
 1. **Import the project.** In Vercel, choose *Add New → Project* and import `sno-tech-nudge/Contract-review-tool`. Leave the build settings as detected; the `vercel-build` script generates the Prisma client, applies database migrations and builds the app.
-2. **Add a Postgres database.** Under the project's *Storage* tab, create a Neon Postgres database (or connect an existing Supabase project). Pick the Mumbai region (`ap-south-1`) to sit next to the app, which runs in Mumbai (`vercel.json`). Then set:
-   - `DATABASE_URL`: the pooled connection string, with `pgbouncer=true` added (Neon's pooled URL, or Supabase's port 6543 URL).
-   - `DIRECT_URL`: the direct, non-pooled connection string (Neon's `DATABASE_URL_UNPOOLED`, or Supabase's port 5432 URL). Migrations run over this one.
+2. **Add a Postgres database.** Under the project's *Storage* tab, create a Neon Postgres database (or connect Supabase) in the Mumbai region (`ap-south-1`), next to the app (`vercel.json`), and connect it to the project. Nothing else to set: the build reads whichever variable names the integration creates (Neon: `DATABASE_URL` + `DATABASE_URL_UNPOOLED`; Supabase: `POSTGRES_PRISMA_URL` + `POSTGRES_URL_NON_POOLING`). To use another Postgres, set `DATABASE_URL` (pooled) and `DIRECT_URL` (direct) yourself.
 3. **Add file storage.** Under *Storage*, create a **Blob** store with **private** access and connect it to the project. This sets `BLOB_READ_WRITE_TOKEN`. Contracts upload from the browser straight to the store, so files up to 25 MB work despite Vercel's 4.5 MB request limit.
 4. **Set the remaining environment variables** (*Settings → Environment Variables*):
-   - `APP_PASSWORD`: the team password. **Required**: without it the deployed app and its contracts are open to anyone with the link.
+   - `APP_PASSWORD`: the team password. Until it is set, the deployed app refuses every visitor, so contracts are never exposed.
    - `AUTH_SECRET`: any long random string.
    - `ANTHROPIC_API_KEY` (optional) for the AI review.
-5. **Deploy.** Redeploy after adding variables so the build picks them up. Every later push to `main` deploys automatically.
+5. **Deploy.** Redeploy after adding variables so the build picks them up. If something is missing, the build log says what (look for lines starting with ✖ or ⚠). Every later push to `main` deploys automatically.
 
 Changing `APP_PASSWORD` or `AUTH_SECRET` signs everyone out. To change the database schema, edit `prisma/schema.prisma`, run `npm run db:migrate` locally to create a migration, and commit it: the next deploy applies it.
 

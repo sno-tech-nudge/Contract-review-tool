@@ -4,7 +4,7 @@ This project is the contract review tool, not the^delta prize admin tool describ
 
 - Repo: https://github.com/sno-tech-nudge/Contract-review-tool, branch `main`. Commit and push only when asked.
 - Stack: Next.js 15 App Router, TypeScript, React 19, Prisma 6 on Postgres, files in a private Vercel Blob store (or `storage/` on disk locally). pdf.js (react-pdf in the browser, unpdf on the server), mammoth for .docx, optional Claude via `@anthropic-ai/sdk`.
-- Deploys to Vercel (see README "Deploying to Vercel"). `vercel-build` runs `prisma generate && prisma migrate deploy && next build`. Functions are pinned to Mumbai (`vercel.json`).
+- Deploys to Vercel (see README "Deploying to Vercel"). `vercel-build` runs `scripts/vercel-build.mjs`: it resolves the database URLs from whichever names the Neon/Supabase integration set (`scripts/database-env.mjs`, also used by `src/lib/db.ts`), then `prisma generate`, `prisma migrate deploy`, `next build`. Functions are pinned to Mumbai (`vercel.json`). On Vercel without `APP_PASSWORD` the middleware returns 503 for everything (fail closed).
 - Local database: `npm run db:local` (Prisma's local Postgres). Its URLs need `&connection_limit=1&pgbouncer=true`, otherwise restarts hit "prepared statement already exists".
 - Dev server runs on Turbopack (`npm run dev`). Webpack dev mode breaks pdfjs-dist v5 ("Object.defineProperty called on non-object"); the production webpack build (`npm run build`) is fine.
 - `npm run lint` is `tsc --noEmit` and must pass before a change is done. For UI changes, check them in the browser preview (`.claude/launch.json` has dev and prod configs).
