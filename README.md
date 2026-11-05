@@ -20,7 +20,7 @@ The contract is shown as a PDF on the left and the review on the right. Clicking
 
 ## Running locally
 
-Requires Node 20+.
+Requires Node 22 (pinned in `package.json` so Vercel doesn't jump major versions).
 
 ```bash
 npm install
@@ -53,6 +53,13 @@ The app is ready for Vercel: Postgres for data, a private Vercel Blob store for 
 5. **Deploy.** Redeploy after adding variables so the build picks them up. If something is missing, the build log says what (look for lines starting with ✖ or ⚠). Every later push to `main` deploys automatically.
 
 Changing `APP_PASSWORD` or `AUTH_SECRET` signs everyone out. To change the database schema, edit `prisma/schema.prisma`, run `npm run db:migrate` locally to create a migration, and commit it: the next deploy applies it.
+
+### If the deployed site doesn't work
+
+- **"Application error: a server-side exception" and `/login` gives 404:** the site is still serving an old build from before the Vercel changes. Vercel keeps the last successful build live until a newer one succeeds. Open *Deployments* and look at the deployment for the newest commit on `main`. Don't use *Redeploy* on an older deployment: that rebuilds the old commit.
+- **Build failed:** open its *Build Logs* and look for lines starting with ✖ (what went wrong) or ⚠ (what is missing). The `Database:` line shows which hosts were used, without passwords.
+- **"Sign-in is not set up yet":** add `APP_PASSWORD` and redeploy.
+- **No deployment appears after a push:** check *Settings → Git* that the project is connected to `sno-tech-nudge/Contract-review-tool` and the production branch is `main`.
 
 ## How it works
 
