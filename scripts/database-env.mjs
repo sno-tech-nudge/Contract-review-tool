@@ -3,10 +3,25 @@
 // POSTGRES_URL_NON_POOLING. This picks the right one for each purpose.
 // Shared by the build script and the app (src/lib/db.ts).
 
+// Exact names first; then the same names with a prefix, which Vercel's Storage
+// dialog allows (e.g. STORAGE_DATABASE_URL).
 const first = (env, names) => {
-  const name = names.find((n) => env[n]);
-  return name ? { value: env[name], name } : null;
+  for (const n of names) if (env[n]) return { value: env[n], name: n };
+  for (const n of names) {
+    const prefixed = Object.keys(env)
+      .filter((k) => k.endsWith(`_${n}`) && env[k])
+      .sort();
+    if (prefixed.length) return { value: env[prefixed[0]], name: prefixed[0] };
+  }
+  return null;
 };
+
+// Names only, never values: lets the build log show what is actually set.
+export function databaseLikeNames(env) {
+  return Object.keys(env)
+    .filter((k) => /DATABASE|POSTGRES|^PG|NEON|SUPABASE/i.test(k) && env[k])
+    .sort();
+}
 
 const isPooled = (url) => /-pooler\.|:6543\//.test(url ?? "");
 

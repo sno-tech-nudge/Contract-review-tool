@@ -20,7 +20,7 @@ The contract is shown as a PDF on the left and the review on the right. Clicking
 
 ## Running locally
 
-Requires Node 22 (pinned in `package.json` so Vercel doesn't jump major versions).
+Requires Node 24 (pinned in `package.json`; the PDF library needs it).
 
 ```bash
 npm install
