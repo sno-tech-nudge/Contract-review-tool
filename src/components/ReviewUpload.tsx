@@ -6,6 +6,7 @@ import { Check, CircleAlert, FileUp } from "lucide-react";
 import { CONTRACT_TYPES, CONTRACT_TYPE_KEYS } from "@/lib/contracts/types";
 import { describeOcr, recogniseScannedPages, type OcrProgress } from "@/lib/ocr-client";
 import { sendContract } from "@/lib/upload-client";
+import { ContractLoader } from "@/components/ContractLoader";
 
 const ACCEPT = ".pdf,.docx,.txt";
 
@@ -91,6 +92,8 @@ export function ReviewUpload({ repositoryCount, legalRuleCount, directUpload }: 
         <input ref={input} type="file" accept={ACCEPT} hidden onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
         {busy ? (
           <>
+            {/* the icon follows the stage: reading, clauses, legal, business */}
+            <ContractLoader stage={phase === "upload" ? Math.min(step, 3) : 0} label={`Reviewing ${busy}`} />
             <p className="dropzone__title">Reviewing {busy}</p>
             <ol className="progress-steps">
               {ocr && (ocr.stage !== "checking" || phase === "ocr") && (

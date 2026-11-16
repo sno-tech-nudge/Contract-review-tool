@@ -11,6 +11,7 @@ import type { Focus } from "@/components/viewer/match";
 import { useToast } from "@/components/Toast";
 import { formatDate } from "@/components/ui";
 import { FindingCard, type FeedbackVerdict, type FindingFeedbackState } from "./FindingCard";
+import { ContractLoader } from "@/components/ContractLoader";
 
 type Tab = "overview" | CheckKind;
 type Filter = "open" | "issue" | "all";
@@ -642,7 +643,7 @@ export function ReviewWorkspace({ review, result, document: doc, aiAvailable, la
             <FolderPlus /> Add to repository
           </button>
           <button className="btn btn--ghost btn--sm" onClick={() => act("rerun")} disabled={!!busy} title="Re-run with the latest repository and rules">
-            <RefreshCw /> {busy === "rerun" ? "Checking…" : "Re-run"}
+            {busy === "rerun" ? <ContractLoader size="sm" label="Re-running the checks" /> : <RefreshCw />} {busy === "rerun" ? "Checking…" : "Re-run"}
           </button>
           <button className="btn btn--ghost btn--sm" style={{ marginLeft: "auto", color: "var(--clay)" }} onClick={() => act("delete")} disabled={!!busy} aria-label="Delete review">
             <Trash2 />

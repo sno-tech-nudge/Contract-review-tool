@@ -218,6 +218,31 @@ button { font: inherit; color: inherit; }
 .progress-steps li[data-state="done"] .ps-mark { border-color: var(--moss); background: var(--moss); color: white; }
 .progress-steps .ps-mark svg { width: 12px; height: 12px; }
 @keyframes spin { to { transform: rotate(360deg); } }
+/* contract loader: magnifier, pen, scales, rupee */
+.cloader { display: inline-flex; flex-direction: column; align-items: center; gap: var(--space-3); }
+.cloader__tile { position: relative; display: block; overflow: hidden; background: var(--taupe-200); border-radius: var(--radius-sm); color: var(--brown-700); }
+.cloader--lg .cloader__tile { width: 64px; height: 64px; }
+.cloader--sm .cloader__tile { width: 20px; height: 20px; border-radius: var(--radius-xs); background: transparent; }
+.cloader__icon { position: absolute; inset: 0; display: grid; place-items: center; opacity: 0; transform: translateY(8px) scale(0.9); transition: opacity var(--duration-slow) var(--ease-standard), transform var(--duration-slow) var(--ease-standard); }
+.cloader__icon--on { opacity: 1; transform: none; }
+.cloader--lg .cloader__icon svg { width: 28px; height: 28px; }
+.cloader--sm .cloader__icon svg { width: 16px; height: 16px; }
+.cloader--sm .cloader__icon { transform: translateY(4px); }
+.cloader--sm .cloader__icon--on { transform: none; }
+/* a quiet light passing over the tile, like a page being scanned */
+.cloader__sweep { position: absolute; top: 0; bottom: 0; left: -60%; width: 45%; background: linear-gradient(90deg, transparent, color-mix(in srgb, white 55%, transparent), transparent); animation: cloader-sweep 1.6s var(--ease-standard) infinite; }
+.cloader--sm .cloader__sweep { display: none; }
+@keyframes cloader-sweep { to { left: 120%; } }
+.cloader__strip { display: flex; gap: var(--space-4); }
+.cloader__step { display: inline-flex; align-items: center; gap: 0.35em; font-size: 0.6875rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--taupe-500); transition: color var(--duration-base) var(--ease-standard); }
+.cloader__step svg { width: 14px; height: 14px; }
+.cloader__step--done { color: var(--moss); }
+.cloader__step--on { color: var(--brown-700); font-weight: var(--weight-medium); }
+.btn .cloader--sm .cloader__tile { color: currentColor; }
+@media (prefers-reduced-motion: reduce) {
+  .cloader__icon { transition: none; transform: none; }
+  .cloader__sweep { animation: none; display: none; }
+}
 .ocr-bar { display: block; width: 220px; max-width: 100%; height: 4px; margin-top: 6px; background: var(--taupe-200); border-radius: 2px; overflow: hidden; }
 .ocr-bar i { display: block; height: 100%; background: var(--brown-600); transition: width var(--duration-slow) var(--ease-standard); }
 

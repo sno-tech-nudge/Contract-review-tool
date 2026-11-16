@@ -8,6 +8,7 @@ import { CONTRACT_TYPES, CONTRACT_TYPE_KEYS, contractTypeLabel } from "@/lib/con
 import { extOf, formatDate, formatSize } from "@/components/ui";
 import { describeOcr, recogniseScannedPages } from "@/lib/ocr-client";
 import { sendContract } from "@/lib/upload-client";
+import { ContractLoader } from "@/components/ContractLoader";
 
 export type RepoDoc = {
   id: string;
@@ -146,8 +147,8 @@ export function RepositoryBrowser({ docs, directUpload }: { docs: RepoDoc[]; dir
           <h1 className="page-title">Contract repository</h1>
           <p className="lead">The knowledge base behind every review. New contracts are compared with the clauses stored here, and approved templates count the most.</p>
         </div>
-        <button className="btn" onClick={() => input.current?.click()}>
-          <Upload /> Add contracts
+        <button className="btn" onClick={() => input.current?.click()} aria-busy={activeUploads}>
+          {activeUploads ? <ContractLoader size="sm" label="Adding contracts" /> : <Upload />} {activeUploads ? "Adding contracts…" : "Add contracts"}
         </button>
         <input
           ref={input}
@@ -328,7 +329,7 @@ export function RepositoryBrowser({ docs, directUpload }: { docs: RepoDoc[]; dir
             {uploads.map((u) => (
               <div className="upload" key={u.key}>
                 <span style={{ paddingTop: 2 }}>
-                  {u.state === "done" ? <CircleCheck size={18} color="var(--moss)" /> : u.state === "error" ? <CircleAlert size={18} color="var(--clay)" /> : <span className="spinner" style={{ display: "block" }} />}
+                  {u.state === "done" ? <CircleCheck size={18} color="var(--moss)" /> : u.state === "error" ? <CircleAlert size={18} color="var(--clay)" /> : <ContractLoader size="sm" stage={u.state === "reading" ? 0 : undefined} label={`Adding ${u.name}`} />}
                 </span>
                 <div style={{ minWidth: 0 }}>
                   <div className="upload__name" title={u.name}>
