@@ -3,25 +3,48 @@ import { findAmounts } from "../text/amounts";
 import type { DocText } from "../text/locate";
 import type { Finding, KeyTerm } from "../review/types";
 
-const DATE = String.raw`(\d{1,2}(?:st|nd|rd|th)?\s+(?:day of\s+)?[A-Z][a-z]+,?\s+\d{4}|[A-Z][a-z]+ \d{1,2},? \d{4}|\d{1,2}[./-]\d{1,2}[./-]\d{2,4})`;
+// Month names spelled out, so OCR fragments like "ne 30, 2026" don't pass as dates.
+const MONTH = String.raw`(?:January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sept?|Oct|Nov|Dec)\.?`;
+const DATE = String.raw`(\d{1,2}(?:st|nd|rd|th)?\s+(?:day of\s+)?${MONTH},?\s+\d{4}|${MONTH}\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4}|\d{1,2}[./-]\d{1,2}[./-]\d{2,4})`;
 
 function clean(s: string): string {
   return s.replace(/\s+/g, " ").replace(/^[\s,:;"“”'(]+|[\s,:;"“”')]+$/g, "").trim();
 }
 
+// Defined terms that use the same "hereinafter referred to as" wording but are
+// not parties ("the Effective Date", "the Project", "Events of Default").
+const NOT_A_PARTY = /\b(date|project|programme|program|agreement|mou|moa|term|period|grant|fund|funds|budget|purpose|events?|default|services?|deliverables?|work|scheme|amount|contribution|assets?|premises|parties)\b/i;
+
+// An organisation name: capitalised words ending in a legal-entity word.
+const ORG = /\b((?:[A-Z][A-Za-z&.'’-]*|of|for|and|the|de)(?:\s+(?:[A-Z][A-Za-z&.'’-]*|of|for|and|the|de)){0,9}\s+(?:Private\s+Limited|Pvt\.?\s+Ltd\.?|Limited|Ltd\.?|LLP|Foundation|Trust|Society|Bank(?:\s+of\s+[A-Z][A-Za-z]+)*|Company|Corporation|Institute|University|Association|Council|Authority|Ministry(?:\s+of\s+[A-Z][A-Za-z ]+)?|Mission|Federation|Fund|Inc\.?))\b/;
+const ORG_CAPS = /\b([A-Z][A-Z&.'’-]+(?:\s+(?:[A-Z][A-Z&.'’-]+|OF|FOR|AND|THE)){0,9}\s+(?:PRIVATE\s+LIMITED|LIMITED|LTD\.?|LLP|FOUNDATION|TRUST|SOCIETY|BANK(?:\s+OF\s+[A-Z]+)*|COMPANY|CORPORATION|INSTITUTE|UNIVERSITY|ASSOCIATION|COUNCIL|AUTHORITY|FUND))\b/;
+
+function organisationIn(text: string): string | null {
+  const flat = text.replace(/\s+/g, " ");
+  // the name written first is the party's own; later ones tend to be the Act
+  // it was set up under ("... established under the Small Industries Bank of India Act")
+  const found = [ORG.exec(flat), ORG_CAPS.exec(flat)].filter((x): x is RegExpExecArray => !!x);
+  const m = found.sort((a, b) => a.index - b.index)[0];
+  if (!m) return null;
+  // drop leading OCR debris such as "Ei " or "the"
+  return m[1].replace(/^(?:(?:[A-Za-z]{1,2}|the|and|of)\s+)+/i, "").trim();
+}
+
 // Party names usually sit just before "(hereinafter referred to as ...)".
+// Only a recognisable organisation counts, so scanned-text debris and defined
+// terms never show up as a party.
 export function findParties(doc: DocText): KeyTerm[] {
   const out: KeyTerm[] = [];
   const re = /hereinafter (?:jointly |collectively )?(?:referred to as|called)\s*(?:the\s+)?["“'‘]?([A-Za-z/&.\- ]{2,40})["”'’]?/gi;
-  for (const m of doc.findAll(re, 6)) {
+  for (const m of doc.findAll(re, 8)) {
     const role = clean(m.match[1]).replace(/^the /i, "");
-    if (/parties|party$/i.test(role) && !/first|second/i.test(role)) continue;
-    const before = doc.full.slice(Math.max(0, m.match.index - 400), m.match.index);
-    const lastJoin = Math.max(before.lastIndexOf("BETWEEN"), before.toLowerCase().lastIndexOf("between"), before.lastIndexOf("AND"), before.lastIndexOf("\nand"), before.toLowerCase().lastIndexOf(" and\n"));
-    let name = lastJoin >= 0 ? before.slice(lastJoin).replace(/^(between|and)\s*:?/i, "") : before.split("\n").slice(-2).join(" ");
-    name = clean(name.split(/,|\(|\n\n/)[0]).slice(0, 90);
-    if (!name || name.length < 3) continue;
-    if (out.some((p) => p.value.startsWith(name))) continue;
+    if (NOT_A_PARTY.test(role) && !/first|second/i.test(role)) continue;
+    const before = doc.full.slice(Math.max(0, m.match.index - 500), m.match.index);
+    const lower = before.toLowerCase();
+    const lastJoin = Math.max(lower.lastIndexOf("between"), before.lastIndexOf("AND"), lower.lastIndexOf("\nand"), lower.lastIndexOf(" and\n"), lower.lastIndexOf("\nand\n"));
+    const window = lastJoin >= 0 ? before.slice(lastJoin).replace(/^(between|and)\s*:?/i, "") : before;
+    const name = organisationIn(window);
+    if (!name || out.some((p) => p.value === name)) continue;
     out.push({ label: role.length < 30 ? role.replace(/\b\w/g, (c) => c.toUpperCase()) : "Party", value: name, quote: m.quote, page: m.page });
   }
   return out.slice(0, 4);

@@ -534,7 +534,9 @@ export const LEGAL_RULES: LegalRule[] = [
 // Signals used to decide which rules apply.
 export function buildContext(doc: DocText, contractType: ContractType): RuleContext {
   const foreignMoney = doc.find(
-    /foreign contribution|\bfcra\b|\busd\b|us\$|\beur\b|€|\bgbp\b|£|\bchf\b|incorporated (?:in|under the laws of) (?:the )?(?:state of )?(?!india)[a-z]+|delaware|501\(c\)\(3\)/i
+    // a currency only counts next to an amount: scanned stamps and seals
+    // produce stray "£" and "€" characters
+    /foreign contribution|\bfcra\b|(?:\b(?:usd|eur|gbp|chf)|us\$)\s?\d|[$€£]\s?\d[\d,.]{2,}|\d[\d,.]*\s?(?:usd|eur|gbp|chf|dollars|euros?|pounds sterling)\b|incorporated (?:in|under the laws of) (?:the )?(?:state of )?(?!india)[a-z]+|delaware|501\(c\)\(3\)/i
   );
   return {
     doc,

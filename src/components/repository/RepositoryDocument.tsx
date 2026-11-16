@@ -6,6 +6,7 @@ import { useState } from "react";
 import { ArrowLeft, Save, Trash2 } from "lucide-react";
 import { CLAUSE_TYPES, CLAUSE_TYPE_KEYS, CONTRACT_TYPES, CONTRACT_TYPE_KEYS } from "@/lib/contracts/types";
 import { DocumentViewer } from "@/components/viewer/DocumentViewer";
+import { SplitPane } from "@/components/SplitPane";
 import type { Focus } from "@/components/viewer/match";
 import { useToast } from "@/components/Toast";
 import { formatDate, formatSize } from "@/components/ui";
@@ -73,8 +74,10 @@ export function RepositoryDocument({ doc, clauses }: { doc: Doc; clauses: { id: 
 
   return (
     <div className="docdetail">
-      <DocumentViewer documentId={doc.id} fileName={doc.fileName} mimeType={doc.mimeType} text={doc.text} focus={focus} />
-
+      <SplitPane
+        storageKey="contract-review.split"
+        left={<DocumentViewer documentId={doc.id} fileName={doc.fileName} mimeType={doc.mimeType} text={doc.text} focus={focus} />}
+        right={
       <section className="side">
         <div className="side__body">
           <Link href="/repository" className="micro" style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", marginBottom: "var(--space-3)" }}>
@@ -178,6 +181,8 @@ export function RepositoryDocument({ doc, clauses }: { doc: Doc; clauses: { id: 
           </div>
         </div>
       </section>
+        }
+      />
     </div>
   );
 }

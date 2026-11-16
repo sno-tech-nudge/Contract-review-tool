@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Download, Minus, Plus, Scan } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Minus, Plus, Scan } from "lucide-react";
 import HtmlViewer from "./HtmlViewer";
 import type { Focus } from "./match";
 
@@ -41,6 +41,14 @@ export function DocumentViewer({ documentId, fileName, mimeType, text, focus }: 
     }
   }, [documentId, isDocx, isPdf, text]);
 
+  const [jump, setJump] = useState<{ page: number; nonce: number } | null>(null);
+  const [pageInput, setPageInput] = useState("");
+  const goTo = (n: number) => {
+    if (!pages) return;
+    const page = Math.min(pages, Math.max(1, n));
+    setJump({ page, nonce: Date.now() });
+    setPageInput("");
+  };
   const onCurrent = useCallback((n: number) => setCurrent(n), []);
   const onPageCount = useCallback((n: number) => setPages(n), []);
 
@@ -52,9 +60,29 @@ export function DocumentViewer({ documentId, fileName, mimeType, text, focus }: 
         </span>
         <div className="viewer__tools">
           {isPdf && pages > 0 && (
-            <span className="micro num" style={{ marginRight: "var(--space-2)" }}>
-              Page {current} / {pages}
-            </span>
+            <div className="pager" role="group" aria-label="Pages">
+              <button className="btn btn--ghost btn--icon" onClick={() => goTo(current - 1)} disabled={current <= 1} aria-label="Previous page" title="Previous page">
+                <ChevronLeft />
+              </button>
+              <input
+                className="pager__input num"
+                inputMode="numeric"
+                aria-label={`Page ${current} of ${pages}. Type a page number and press Enter`}
+                value={pageInput || String(current)}
+                onFocus={(e) => e.target.select()}
+                onChange={(e) => setPageInput(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && pageInput) goTo(Number(pageInput));
+                  if (e.key === "Escape") setPageInput("");
+                }}
+                onBlur={() => setPageInput("")}
+              />
+              <span className="micro num">of {pages}</span>
+              <button className="btn btn--ghost btn--icon" onClick={() => goTo(current + 1)} disabled={current >= pages} aria-label="Next page" title="Next page">
+                <ChevronRight />
+              </button>
+              <span className="sep" />
+            </div>
           )}
           {isPdf && (
             <>
@@ -80,7 +108,7 @@ export function DocumentViewer({ documentId, fileName, mimeType, text, focus }: 
       </div>
       <div className="viewer__scroll" ref={scrollRef}>
         {isPdf ? (
-          <PdfViewer fileUrl={`/api/files/${documentId}`} zoom={zoom} focus={focus} onPageCount={onPageCount} onCurrentPage={onCurrent} scrollRef={scrollRef} />
+          <PdfViewer fileUrl={`/api/files/${documentId}`} zoom={zoom} focus={focus} jump={jump} onPageCount={onPageCount} onCurrentPage={onCurrent} scrollRef={scrollRef} />
         ) : html === null ? (
           <div className="viewer__loading">Loading document…</div>
         ) : (

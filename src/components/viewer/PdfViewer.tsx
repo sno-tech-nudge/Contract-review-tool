@@ -12,6 +12,7 @@ type Props = {
   fileUrl: string;
   zoom: number;
   focus: Focus | null;
+  jump?: { page: number; nonce: number } | null;
   onPageCount: (n: number) => void;
   onCurrentPage: (n: number) => void;
   scrollRef: React.RefObject<HTMLDivElement | null>;
@@ -19,21 +20,36 @@ type Props = {
 
 const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
-export default function PdfViewer({ fileUrl, zoom, focus, onPageCount, onCurrentPage, scrollRef }: Props) {
+export default function PdfViewer({ fileUrl, zoom, focus, jump, onPageCount, onCurrentPage, scrollRef }: Props) {
   const [numPages, setNumPages] = useState(0);
   const [width, setWidth] = useState(720);
   const [texts, setTexts] = useState<Record<number, string[]>>({});
   const [marked, setMarked] = useState<{ page: number; items: Set<number> } | null>(null);
   const pageRefs = useRef<Record<number, HTMLDivElement | null>>({});
 
-  // Fit pages to the panel width.
+  // Fit pages to the panel width; settle before re-rendering so dragging the
+  // divider stays smooth.
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => setWidth(Math.min(el.clientWidth - 96, 900)));
+    let t: ReturnType<typeof setTimeout> | undefined;
+    const fit = () => setWidth(Math.min(el.clientWidth - 96, 900));
+    fit();
+    const ro = new ResizeObserver(() => {
+      clearTimeout(t);
+      t = setTimeout(fit, 120);
+    });
     ro.observe(el);
-    return () => ro.disconnect();
+    return () => {
+      clearTimeout(t);
+      ro.disconnect();
+    };
   }, [scrollRef]);
+
+  // Page navigation from the toolbar.
+  useEffect(() => {
+    if (jump) pageRefs.current[jump.page]?.scrollIntoView({ block: "start", behavior: "smooth" });
+  }, [jump]);
 
   // Track which page is in view: the last page whose top has passed the
   // upper third of the panel.

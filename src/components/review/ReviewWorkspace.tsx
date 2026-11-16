@@ -12,6 +12,7 @@ import { useToast } from "@/components/Toast";
 import { formatDate } from "@/components/ui";
 import { FindingCard, type FeedbackVerdict, type FindingFeedbackState } from "./FindingCard";
 import { ContractLoader } from "@/components/ContractLoader";
+import { SplitPane } from "@/components/SplitPane";
 
 type Tab = "overview" | CheckKind;
 type Filter = "open" | "issue" | "all";
@@ -297,12 +298,30 @@ export function ReviewWorkspace({ review, result, document: doc, aiAvailable, la
 
   return (
     <div className="workspace">
-      <DocumentViewer documentId={doc.id} fileName={doc.fileName} mimeType={doc.mimeType} text={doc.text} focus={focus} />
-
+      <SplitPane
+        storageKey="contract-review.split"
+        left={<DocumentViewer documentId={doc.id} fileName={doc.fileName} mimeType={doc.mimeType} text={doc.text} focus={focus} />}
+        right={
       <section className="side" aria-label="Review">
-        <div className="side__head">
-          <span className="kicker">Review · {formatDate(review.createdAt)}</span>
-          <h1 className="side__title">{doc.title}</h1>
+        <header className="side__head">
+          <div className="side__titlebar">
+            <div className="side__titles">
+              <span className="kicker">Review · {formatDate(review.createdAt)}</span>
+              <h1 className="side__title" title={doc.title}>
+                {doc.title}
+              </h1>
+            </div>
+            <button className={`riskchip riskchip--${band.tone}`} onClick={() => switchTab("overview")} title="Risk score. Open Overview for the breakdown">
+              <span className="riskchip__score num">
+                {review.riskScore}
+                <small>/100</small>
+              </span>
+              <span className="riskchip__label">{band.label}</span>
+              <span className="riskchip__bar" aria-hidden>
+                <i style={{ width: `${Math.max(4, review.riskScore)}%` }} />
+              </span>
+            </button>
+          </div>
           <div className="side__meta">
             <span className="typepick">
               <select
@@ -337,37 +356,11 @@ export function ReviewWorkspace({ review, result, document: doc, aiAvailable, la
             <span>{result.clauses.length} clauses</span>
             {doc.scanned && (
               <span className="badge badge--gold" title="Text was recognised from a scanned image, so quotes may contain small errors. Clicking a finding opens its page rather than highlighting the words.">
-                Scanned · text by OCR
+                Scanned · OCR
               </span>
             )}
           </div>
-
-          <div className="risk" style={{ marginTop: "var(--space-4)" }}>
-            <div>
-              <div className="risk__score">
-                {review.riskScore}
-                <small>/100</small>
-              </div>
-            </div>
-            <div>
-              <span className={`badge badge--${band.tone}`}>{band.label}</span>
-              <div className="risk__meter" aria-hidden>
-                <span className="risk__marker" style={{ left: `${review.riskScore}%` }} />
-              </div>
-              <div className="risk__counts">
-                <span style={{ color: "var(--clay)" }}>
-                  <span className="dot" /> <b>{issues}</b> issues
-                </span>
-                <span style={{ color: "var(--tone-warning)" }}>
-                  <span className="dot" /> <b>{warnings}</b> to check
-                </span>
-                <span style={{ color: "var(--moss)" }}>
-                  <span className="dot" /> <b>{passed}</b> passed
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
+        </header>
 
         <div className="side__tabs">
           <div className="tabs" role="tablist">
@@ -383,6 +376,30 @@ export function ReviewWorkspace({ review, result, document: doc, aiAvailable, la
         <div className="side__body" ref={bodyRef}>
           {tab === "overview" && (
             <>
+              <div className="risk block">
+                <div className="risk__score">
+                  {review.riskScore}
+                  <small>/100</small>
+                </div>
+                <div>
+                  <span className={`badge badge--${band.tone}`}>{band.label}</span>
+                  <div className="risk__meter" aria-hidden>
+                    <span className="risk__marker" style={{ left: `${review.riskScore}%` }} />
+                  </div>
+                  <div className="risk__counts">
+                    <button className="risk__count" style={{ color: "var(--clay)" }} onClick={() => { setFilter("issue"); switchTab("legal"); }}>
+                      <span className="dot" /> <b>{issues}</b> issues
+                    </button>
+                    <span style={{ color: "var(--tone-warning)" }}>
+                      <span className="dot" /> <b>{warnings}</b> to check
+                    </span>
+                    <span style={{ color: "var(--moss)" }}>
+                      <span className="dot" /> <b>{passed}</b> passed
+                    </span>
+                  </div>
+                </div>
+              </div>
+
               {aiBanner && <div className="block">{aiBanner}</div>}
 
               <div className="block">
@@ -632,24 +649,27 @@ export function ReviewWorkspace({ review, result, document: doc, aiAvailable, la
           )}
         </div>
 
-        <div className="side__foot">
-          <a className="btn btn--sm" href={`/review/${review.id}/report`} target="_blank" rel="noreferrer">
-            <FileDown /> Export report
+        <footer className="side__foot">
+          <a className="btn btn--sm" href={`/review/${review.id}/report`} target="_blank" rel="noreferrer" title="Open a printable report">
+            <FileDown /> <span className="btn__label">Export report</span>
           </a>
-          <button className="btn btn--secondary btn--sm" onClick={startFlag} title="Select a passage in the contract first to quote it">
-            <Flag /> Flag a miss
+          <button className="btn btn--secondary btn--sm" onClick={startFlag} title="Flag something the checks missed. Select a passage in the contract first to quote it">
+            <Flag /> <span className="btn__label">Flag a miss</span>
           </button>
-          <button className="btn btn--secondary btn--sm" onClick={() => act("repo")} disabled={!!busy}>
-            <FolderPlus /> Add to repository
+          <button className="btn btn--secondary btn--sm" onClick={() => act("repo")} disabled={!!busy} title="File this contract in the repository">
+            <FolderPlus /> <span className="btn__label">Add to repository</span>
           </button>
-          <button className="btn btn--ghost btn--sm" onClick={() => act("rerun")} disabled={!!busy} title="Re-run with the latest repository and rules">
-            {busy === "rerun" ? <ContractLoader size="sm" label="Re-running the checks" /> : <RefreshCw />} {busy === "rerun" ? "Checking…" : "Re-run"}
+          <span className="side__foot-gap" />
+          <button className="btn btn--ghost btn--sm btn--icon" onClick={() => act("rerun")} disabled={!!busy} title="Re-run the checks with the latest repository, rules and learning" aria-label="Re-run the checks">
+            {busy === "rerun" ? <ContractLoader size="sm" label="Re-running the checks" /> : <RefreshCw />}
           </button>
-          <button className="btn btn--ghost btn--sm" style={{ marginLeft: "auto", color: "var(--clay)" }} onClick={() => act("delete")} disabled={!!busy} aria-label="Delete review">
+          <button className="btn btn--ghost btn--sm btn--icon" style={{ color: "var(--clay)" }} onClick={() => act("delete")} disabled={!!busy} aria-label="Delete review" title="Delete this review">
             <Trash2 />
           </button>
-        </div>
+        </footer>
       </section>
+        }
+      />
 
       {flagging && (
         <div className="modal-back" onMouseDown={(e) => e.target === e.currentTarget && setFlagging(null)}>
