@@ -13,7 +13,7 @@ export async function POST(request: Request) {
     const upload = await readContractUpload(request);
     const requested = (upload.fields.contractType ?? "") as ContractType;
     const contractType = CONTRACT_TYPE_KEYS.includes(requested) ? requested : undefined;
-    const doc = await ingestFile(upload.buffer, upload.name, { kind: "REVIEW", contractType, storageKey: upload.storageKey });
+    const doc = await ingestFile(upload.buffer, upload.name, { kind: "REVIEW", contractType, storageKey: upload.storageKey, ocrPages: upload.ocrPages });
     const review = await runReview(doc.id);
     return NextResponse.json({ id: review.id });
   } catch (err) {

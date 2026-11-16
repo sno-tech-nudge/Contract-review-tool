@@ -27,6 +27,7 @@ model Document {
   isTemplate   Boolean  @default(false) // approved boilerplate, weighted higher when comparing
   notes        String   @default("")
   pageCount    Int      @default(0)
+  textSource   String   @default("pdf") // pdf | ocr (scanned pages recognised in the browser)
   text         String   @default("")
   pagesJson    String   @default("[]") // string[] of per-page text
   createdAt    DateTime @default(now())

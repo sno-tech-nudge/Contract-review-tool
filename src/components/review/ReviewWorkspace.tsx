@@ -18,7 +18,7 @@ type Filter = "open" | "issue" | "all";
 type Props = {
   review: { id: string; createdAt: string; riskScore: number };
   result: ReviewResult;
-  document: { id: string; title: string; fileName: string; mimeType: string; pageCount: number; text: string };
+  document: { id: string; title: string; fileName: string; mimeType: string; pageCount: number; scanned: boolean; text: string };
   aiAvailable: boolean;
   lawDescriptions: Record<string, string>;
 };
@@ -233,6 +233,11 @@ export function ReviewWorkspace({ review, result, document: doc, aiAvailable, la
             </span>
             <span aria-hidden>·</span>
             <span>{result.clauses.length} clauses</span>
+            {doc.scanned && (
+              <span className="badge badge--gold" title="Text was recognised from a scanned image, so quotes may contain small errors. Clicking a finding opens its page rather than highlighting the words.">
+                Scanned · text by OCR
+              </span>
+            )}
           </div>
 
           <div className="risk" style={{ marginTop: "var(--space-4)" }}>

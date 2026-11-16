@@ -21,6 +21,7 @@ type Doc = {
   isTemplate: boolean;
   notes: string;
   pageCount: number;
+  scanned: boolean;
   size: number;
   createdAt: string;
   text: string;
@@ -71,6 +72,11 @@ export function RepositoryDocument({ doc, clauses }: { doc: Doc; clauses: { id: 
           </h1>
           <div className="side__meta">
             <span className="num">{doc.pageCount} pages</span>·<span className="num">{formatSize(doc.size)}</span>·<span>Added {formatDate(doc.createdAt)}</span>
+            {doc.scanned && (
+              <span className="badge badge--gold" title="Text was recognised from a scanned image, so quotes may contain small errors. Clicking a finding opens its page rather than highlighting the words.">
+                Scanned · text by OCR
+              </span>
+            )}
           </div>
 
           <div className="block" style={{ marginTop: "var(--space-5)" }}>

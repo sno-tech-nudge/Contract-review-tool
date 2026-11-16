@@ -64,6 +64,7 @@ Changing `APP_PASSWORD` or `AUTH_SECRET` signs everyone out. To change the datab
 ## How it works
 
 - `src/lib/extract.ts` pulls text per page from PDF (pdf.js), Word (mammoth) and text files.
+- **Scanned PDFs:** pages without a text layer are read in the browser before upload (`src/lib/ocr-client.ts`: pdf.js renders the page, tesseract.js recognises it), so OCR costs nothing and isn't limited by server time. Roughly 3 seconds a page. The server keeps real text wherever a page has it (`mergeOcr` in `extract.ts`), and the contract is marked "Scanned · text by OCR": its quotes may contain small recognition errors, and clicking a finding opens the right page rather than highlighting words.
 - `src/lib/contracts/` splits a contract into clauses (`segment.ts`) and classifies each clause and the contract type by keyword signals (`classify.ts`, `types.ts`).
 - `src/lib/checks/boilerplate.ts` compares clauses with the repository using TF-IDF similarity. Expected clauses are learned from the repository once it holds two or more contracts of a type; until then a standard checklist is used.
 - `src/lib/checks/legal/rules.ts` holds the legal rules. Each rule says when it applies and what wording satisfies it, with the statutory reference.

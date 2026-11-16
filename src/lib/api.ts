@@ -15,7 +15,7 @@ export function handleError(err: unknown) {
 
 export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 
-export type ContractUpload = { buffer: Buffer; name: string; storageKey?: string; fields: Record<string, string> };
+export type ContractUpload = { buffer: Buffer; name: string; storageKey?: string; fields: Record<string, string>; ocrPages?: unknown };
 
 // Contracts arrive either as a multipart form (local development) or, on
 // Vercel, as JSON naming a file the browser already uploaded to Blob storage.
@@ -30,7 +30,7 @@ export async function readContractUpload(request: Request): Promise<ContractUplo
     const buffer = await readFile(storageKey);
     if (buffer.length > MAX_UPLOAD_BYTES) throw new IngestError("Files must be 25 MB or smaller.");
     const fields = Object.fromEntries(Object.entries(body).filter(([, v]) => typeof v === "string" || typeof v === "boolean").map(([k, v]) => [k, String(v)]));
-    return { buffer, name, storageKey, fields };
+    return { buffer, name, storageKey, fields, ocrPages: body.ocrPages };
   }
 
   const form = await request.formData();
@@ -39,7 +39,13 @@ export async function readContractUpload(request: Request): Promise<ContractUplo
   if (file.size > MAX_UPLOAD_BYTES) throw new IngestError("Files must be 25 MB or smaller.");
   const fields: Record<string, string> = {};
   form.forEach((v, k) => {
-    if (typeof v === "string") fields[k] = v;
+    if (typeof v === "string" && k !== "ocrPages") fields[k] = v;
   });
-  return { buffer: Buffer.from(await file.arrayBuffer()), name: file.name, fields };
+  let ocrPages: unknown;
+  try {
+    ocrPages = JSON.parse(String(form.get("ocrPages") ?? "null"));
+  } catch {
+    ocrPages = undefined;
+  }
+  return { buffer: Buffer.from(await file.arrayBuffer()), name: file.name, fields, ocrPages };
 }

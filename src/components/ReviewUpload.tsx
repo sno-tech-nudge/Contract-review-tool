@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, CircleAlert, FileUp } from "lucide-react";
 import { CONTRACT_TYPES, CONTRACT_TYPE_KEYS } from "@/lib/contracts/types";
+import { describeOcr, recogniseScannedPages, type OcrProgress } from "@/lib/ocr-client";
 import { sendContract } from "@/lib/upload-client";
 
 const ACCEPT = ".pdf,.docx,.txt";
@@ -16,6 +17,8 @@ export function ReviewUpload({ repositoryCount, legalRuleCount, directUpload }: 
   const [step, setStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [contractType, setContractType] = useState("");
+  const [phase, setPhase] = useState<"ocr" | "upload" | null>(null);
+  const [ocr, setOcr] = useState<OcrProgress | null>(null);
 
   const steps = [
     "Reading the document",
@@ -27,11 +30,11 @@ export function ReviewUpload({ repositoryCount, legalRuleCount, directUpload }: 
   // The server does all the work in one request; the steps advance on a timer
   // so people can see what is happening.
   useEffect(() => {
-    if (!busy) return;
+    if (phase !== "upload") return;
     setStep(0);
     const t = setInterval(() => setStep((s) => Math.min(s + 1, steps.length - 1)), 900);
     return () => clearInterval(t);
-  }, [busy, steps.length]);
+  }, [phase, steps.length]);
 
   const upload = useCallback(
     async (file: File) => {
@@ -39,14 +42,25 @@ export function ReviewUpload({ repositoryCount, legalRuleCount, directUpload }: 
       if (!/\.(pdf|docx|txt)$/i.test(file.name)) return setError("Please upload a PDF, Word (.docx) or text file.");
       if (file.size > 25 * 1024 * 1024) return setError("Files must be 25 MB or smaller.");
       setBusy(file.name);
+      setOcr(null);
+      setPhase("ocr");
+      // Scanned PDFs have no text layer: recognise it here before uploading.
+      let ocrPages: (string | null)[] | null = null;
       try {
-        const res = await sendContract("/api/reviews", file, contractType ? { contractType } : {}, directUpload);
+        ocrPages = await recogniseScannedPages(file, setOcr);
+      } catch (e) {
+        console.warn("Text recognition failed", e);
+      }
+      setPhase("upload");
+      try {
+        const res = await sendContract("/api/reviews", file, contractType ? { contractType } : {}, directUpload, ocrPages);
         const json = await res.json();
         if (!res.ok) throw new Error(json.error ?? "Upload failed.");
         setStep(steps.length);
         router.push(`/review/${json.id}`);
       } catch (e) {
         setBusy(null);
+        setPhase(null);
         setError(e instanceof Error ? e.message : "Upload failed.");
       }
     },
@@ -79,8 +93,21 @@ export function ReviewUpload({ repositoryCount, legalRuleCount, directUpload }: 
           <>
             <p className="dropzone__title">Reviewing {busy}</p>
             <ol className="progress-steps">
+              {ocr && (ocr.stage !== "checking" || phase === "ocr") && (
+                <li data-state={phase === "ocr" ? "active" : "done"}>
+                  <span className="ps-mark">{phase === "ocr" ? null : <Check strokeWidth={3} />}</span>
+                  <span>
+                    {describeOcr(ocr)}
+                    {ocr.stage === "page" && phase === "ocr" && (
+                      <span className="ocr-bar" aria-hidden>
+                        <i style={{ width: `${Math.round((ocr.done / ocr.total) * 100)}%` }} />
+                      </span>
+                    )}
+                  </span>
+                </li>
+              )}
               {steps.map((s, i) => (
-                <li key={s} data-state={i < step ? "done" : i === step ? "active" : "todo"}>
+                <li key={s} data-state={phase !== "upload" ? "todo" : i < step ? "done" : i === step ? "active" : "todo"}>
                   <span className="ps-mark">{i < step ? <Check strokeWidth={3} /> : null}</span>
                   {s}
                 </li>
@@ -96,7 +123,7 @@ export function ReviewUpload({ repositoryCount, legalRuleCount, directUpload }: 
             <p className="dropzone__hint">
               or <u>choose a file</u> from your computer
             </p>
-            <span className="dropzone__meta">PDF, Word or text · up to 25 MB</span>
+            <span className="dropzone__meta">PDF, Word or text · up to 25 MB · scanned PDFs are read automatically</span>
             {error && (
               <span className="dropzone__error" role="alert">
                 <CircleAlert size={16} /> {error}

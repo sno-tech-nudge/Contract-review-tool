@@ -21,6 +21,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       contractType: review.contractType as ContractType,
       counterparty: d.counterparty,
       isTemplate: Boolean(body.isTemplate),
+      // keeps the text of scanned contracts, which the file alone no longer provides
+      ocrPages: JSON.parse(d.pagesJson),
     });
     return NextResponse.json({ id: doc.id });
   } catch (err) {

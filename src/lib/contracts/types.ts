@@ -17,8 +17,8 @@ export const CONTRACT_TYPES = {
     signals: ["memorandum of understanding", "mou", "non-binding", "collaborate", "intent of the parties"],
   },
   partnership: {
-    label: "Partnership / sub-grant",
-    signals: ["partnership agreement", "collaboration agreement", "implementation partner", "implementing partner", "consortium", "sub-grant", "partner organisation"],
+    label: "Partnership / collaboration",
+    signals: ["partnership agreement", "collaboration agreement", "collaborator", "collaboration", "co-host", "implementation partner", "implementing partner", "designated partner", "consortium", "sub-grant", "partner organisation"],
   },
   service: {
     label: "Service / vendor agreement",

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BadgeCheck, CircleAlert, CircleCheck, Folder, FolderOpen, LayoutGrid, List, Search, Star, Upload, X } from "lucide-react";
 import { CONTRACT_TYPES, CONTRACT_TYPE_KEYS, contractTypeLabel } from "@/lib/contracts/types";
 import { extOf, formatDate, formatSize } from "@/components/ui";
+import { describeOcr, recogniseScannedPages } from "@/lib/ocr-client";
 import { sendContract } from "@/lib/upload-client";
 
 export type RepoDoc = {
@@ -17,13 +18,14 @@ export type RepoDoc = {
   tags: string[];
   isTemplate: boolean;
   pageCount: number;
+  scanned: boolean;
   size: number;
   createdAt: string;
   clauses: number;
   search: string;
 };
 
-type UploadItem = { key: string; name: string; state: "queued" | "uploading" | "done" | "error"; error?: string; id?: string; contractType?: string; isTemplate?: boolean };
+type UploadItem = { key: string; name: string; state: "queued" | "reading" | "uploading" | "done" | "error"; note?: string; error?: string; id?: string; contractType?: string; isTemplate?: boolean };
 
 const ACCEPTED = /\.(pdf|docx|txt)$/i;
 
@@ -66,12 +68,20 @@ export function RepositoryBrowser({ docs, directUpload }: { docs: RepoDoc[]; dir
       setUploads((u) => [...items, ...u]);
       for (let i = 0; i < files.length; i++) {
         if (items[i].state === "error") continue;
+        // Scanned PDFs: recognise the text in the browser before uploading.
+        update(items[i].key, { state: "reading", note: undefined });
+        let ocrPages: (string | null)[] | null = null;
+        try {
+          ocrPages = await recogniseScannedPages(files[i], (p) => update(items[i].key, { note: describeOcr(p) }));
+        } catch (e) {
+          console.warn("Text recognition failed", e);
+        }
         update(items[i].key, { state: "uploading" });
         const fields: Record<string, string> = {};
         if (folder !== "all" && folder !== "templates") fields.contractType = folder;
         if (folder === "templates") fields.isTemplate = "true";
         try {
-          const res = await sendContract("/api/repository", files[i], fields, directUpload);
+          const res = await sendContract("/api/repository", files[i], fields, directUpload, ocrPages);
           const json = await res.json();
           if (!res.ok) throw new Error(json.error ?? "Upload failed");
           update(items[i].key, { state: "done", id: json.id, contractType: json.contractType, isTemplate: folder === "templates" });
@@ -126,7 +136,7 @@ export function RepositoryBrowser({ docs, directUpload }: { docs: RepoDoc[]; dir
     { key: "templates", label: "Approved templates", icon: BadgeCheck },
   ];
   const totalClauses = docs.reduce((n, d) => n + d.clauses, 0);
-  const activeUploads = uploads.some((u) => u.state === "queued" || u.state === "uploading");
+  const activeUploads = uploads.some((u) => u.state === "queued" || u.state === "reading" || u.state === "uploading");
 
   return (
     <main className="page">
@@ -219,7 +229,7 @@ export function RepositoryBrowser({ docs, directUpload }: { docs: RepoDoc[]; dir
               <p className="dropzone__hint">
                 Drop signed contracts and approved templates anywhere on this page, or <u>choose files</u>.
               </p>
-              <span className="dropzone__meta">Several files at once · PDF, Word or text · up to 25 MB each</span>
+              <span className="dropzone__meta">Several files at once · PDF, Word or text · up to 25 MB each · scanned PDFs are read automatically</span>
             </button>
           ) : shown.length === 0 ? (
             <div className="empty">
@@ -252,6 +262,7 @@ export function RepositoryBrowser({ docs, directUpload }: { docs: RepoDoc[]; dir
                     {d.counterparty && <span className="caption" style={{ fontSize: "var(--text-xs)" }}>{d.counterparty}</span>}
                     <span className="doc__meta num">
                       <span>{d.pageCount} pp</span>·<span>{d.clauses} clauses</span>·<span>{formatDate(d.createdAt)}</span>
+                      {d.scanned && <span title="Text recognised from a scanned copy">· Scanned</span>}
                     </span>
                   </div>
                 </Link>
@@ -308,7 +319,7 @@ export function RepositoryBrowser({ docs, directUpload }: { docs: RepoDoc[]; dir
       {uploads.length > 0 && (
         <div className="uploads" role="status">
           <div className="uploads__head">
-            <span>{activeUploads ? `Adding ${uploads.filter((u) => u.state === "queued" || u.state === "uploading").length} file(s)…` : `${uploads.filter((u) => u.state === "done").length} added`}</span>
+            <span>{activeUploads ? `Adding ${uploads.filter((u) => u.state === "queued" || u.state === "reading" || u.state === "uploading").length} file(s)…` : `${uploads.filter((u) => u.state === "done").length} added`}</span>
             <button onClick={() => setUploads([])} aria-label="Close" disabled={activeUploads}>
               <X size={16} />
             </button>
@@ -324,6 +335,7 @@ export function RepositoryBrowser({ docs, directUpload }: { docs: RepoDoc[]; dir
                     {u.state === "done" && u.id ? <Link href={`/repository/${u.id}`}>{u.name}</Link> : u.name}
                   </div>
                   <div className="upload__row">
+                    {u.state === "reading" && (u.note ?? "Checking for scanned pages")}
                     {u.state === "uploading" && "Reading and indexing clauses…"}
                     {u.state === "queued" && "Waiting"}
                     {u.state === "error" && <span className="upload__err">{u.error}</span>}

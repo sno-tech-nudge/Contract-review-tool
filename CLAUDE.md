@@ -17,6 +17,7 @@ This project is the contract review tool, not the^delta prize admin tool describ
 - The filesystem is read-only on Vercel: anything written must go through `src/lib/storage.ts`.
 - Sign-in: `APP_PASSWORD` turns on the shared-password gate in `src/middleware.ts`; the session cookie is a hash of the password and `AUTH_SECRET`. Every new page and API route is protected automatically by the middleware matcher.
 - Postgres rejects NUL bytes in text; `extract.ts` strips them.
+- Scanned PDFs are OCR'd in the browser (`src/lib/ocr-client.ts`, tesseract.js, loaded on demand) and the per-page text travels with the upload as `ocrPages`; the server only uses it for pages with no text layer (`mergeOcr`) and sets `Document.textSource = "ocr"`. Render pages with pdf.js `intent: "print"`: the default display intent waits on animation frames and stalls in background tabs. Anything that re-ingests a stored file (e.g. `to-repository`) must pass the stored `pagesJson` as `ocrPages`, or scanned contracts lose their text.
 
 ## Design
 
@@ -24,7 +25,7 @@ Follows The/Nudge design system ("Proof System"): brown `#693d30` text on warm p
 
 ## Where things are
 
-- `src/lib/contracts/`: clause segmentation, clause and contract-type classification, ingestion.
+- `src/lib/contracts/`: clause segmentation, clause and contract-type classification, ingestion. Contract type is driven by title phrases (`TITLE_PHRASES` in `classify.ts`) plus a CSR override; generic keywords are capped. Matching runs on whitespace-flattened text because PDF line breaks split phrases.
 - `src/lib/checks/`: `boilerplate.ts` (repository comparison, one-sided terms), `legal/rules.ts` (all legal rules with references), `business.ts` + `business-kinds.ts` (configurable rules), `keyterms.ts`, `model-clauses.ts` (starter wording used before the repository has examples).
 - `src/lib/review/`: result types, risk score, `run.ts` orchestration.
 - `src/components/viewer/`: PDF and HTML viewers; `match.ts` finds a quote in rendered text for highlighting.

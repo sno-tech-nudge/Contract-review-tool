@@ -31,6 +31,7 @@ export default async function RepositoryDocumentPage({ params }: { params: Promi
         isTemplate: doc.isTemplate,
         notes: doc.notes,
         pageCount: doc.pageCount,
+        scanned: doc.textSource === "ocr",
         size: doc.size,
         createdAt: doc.createdAt.toISOString(),
         text: doc.mimeType === "text/plain" ? doc.text : "",

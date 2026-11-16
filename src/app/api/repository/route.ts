@@ -17,6 +17,7 @@ export async function POST(request: Request) {
       contractType: CONTRACT_TYPE_KEYS.includes(requested) ? requested : undefined,
       isTemplate: upload.fields.isTemplate === "true",
       storageKey: upload.storageKey,
+      ocrPages: upload.ocrPages,
     });
     return NextResponse.json({ id: doc.id, title: doc.title, contractType: doc.contractType, pageCount: doc.pageCount });
   } catch (err) {

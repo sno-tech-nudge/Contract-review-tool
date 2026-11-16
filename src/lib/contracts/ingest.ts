@@ -1,5 +1,5 @@
 import { prisma } from "../db";
-import { extractText, mimeFor } from "../extract";
+import { extractText, mergeOcr, mimeFor } from "../extract";
 import { deleteFile, saveFile } from "../storage";
 import { DocText } from "../text/locate";
 import { detectContractType } from "./classify";
@@ -14,6 +14,7 @@ export type IngestOptions = {
   tags?: string;
   isTemplate?: boolean;
   storageKey?: string; // set when the file is already in storage (direct browser upload)
+  ocrPages?: unknown; // per-page text recognised in the browser for scanned pages
 };
 
 export class IngestError extends Error {}
@@ -40,10 +41,12 @@ async function ingest(buffer: Buffer, fileName: string, opts: IngestOptions) {
   const mimeType = mimeFor(fileName);
   if (!mimeType) throw new IngestError("Only PDF, Word (.docx) and plain text files are supported.");
 
-  const { pages, pageCount } = await extractText(buffer, mimeType);
+  const extracted = await extractText(buffer, mimeType);
+  const { pages, usedOcr } = mergeOcr(extracted.pages, opts.ocrPages);
+  const pageCount = extracted.pageCount;
   const doc = new DocText(pages);
   if (doc.full.replace(/\s/g, "").length < 50) {
-    throw new IngestError("No readable text found. If this is a scanned PDF, run it through OCR first.");
+    throw new IngestError("No readable text found. If this is a scanned PDF, upload it again here and let the text recognition finish.");
   }
 
   const detected = detectContractType(doc.full);
@@ -63,6 +66,7 @@ async function ingest(buffer: Buffer, fileName: string, opts: IngestOptions) {
       tags: opts.tags ?? "",
       isTemplate: opts.isTemplate ?? false,
       pageCount,
+      textSource: usedOcr ? "ocr" : "pdf",
       text: doc.full,
       pagesJson: JSON.stringify(pages),
       clauses: {

@@ -24,7 +24,7 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
     <ReviewWorkspace
       review={{ id: review.id, createdAt: review.createdAt.toISOString(), riskScore: review.riskScore }}
       result={JSON.parse(review.resultJson) as ReviewResult}
-      document={{ id: d.id, title: d.title, fileName: d.fileName, mimeType: d.mimeType, pageCount: d.pageCount, text: d.mimeType === "text/plain" ? d.text : "" }}
+      document={{ id: d.id, title: d.title, fileName: d.fileName, mimeType: d.mimeType, pageCount: d.pageCount, scanned: d.textSource === "ocr", text: d.mimeType === "text/plain" ? d.text : "" }}
       aiAvailable={aiEnabled()}
       lawDescriptions={lawDescriptions}
     />
