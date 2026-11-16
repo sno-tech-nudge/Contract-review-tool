@@ -4,6 +4,7 @@ import { aiEnabled } from "@/lib/ai/claude";
 import { LAWS } from "@/lib/checks/legal/rules";
 import type { ReviewResult } from "@/lib/review/types";
 import { ReviewWorkspace } from "@/components/review/ReviewWorkspace";
+import type { FindingFeedbackState } from "@/components/review/FindingCard";
 
 export const dynamic = "force-dynamic";
 
@@ -15,10 +16,18 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
 export default async function ReviewPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const review = await prisma.review.findUnique({ where: { id }, include: { document: true } });
+  const review = await prisma.review.findUnique({
+    where: { id },
+    include: {
+      document: true,
+      feedback: { select: { findingId: true, verdict: true, reason: true } },
+      missed: { where: { status: { not: "dismissed" } }, orderBy: { createdAt: "asc" }, select: { id: true, quote: true, note: true, severity: true, page: true } },
+    },
+  });
   if (!review) notFound();
   const d = review.document;
   const lawDescriptions = Object.fromEntries(Object.values(LAWS).map((l) => [l.label, l.description]));
+  const feedback = Object.fromEntries(review.feedback.map((f) => [f.findingId, { verdict: f.verdict, reason: f.reason } as FindingFeedbackState]));
 
   return (
     <ReviewWorkspace
@@ -27,6 +36,8 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
       document={{ id: d.id, title: d.title, fileName: d.fileName, mimeType: d.mimeType, pageCount: d.pageCount, scanned: d.textSource === "ocr", text: d.mimeType === "text/plain" ? d.text : "" }}
       aiAvailable={aiEnabled()}
       lawDescriptions={lawDescriptions}
+      feedback={feedback}
+      missed={review.missed}
     />
   );
 }

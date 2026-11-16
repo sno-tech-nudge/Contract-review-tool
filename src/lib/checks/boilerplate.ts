@@ -1,6 +1,6 @@
 import { classifyClause } from "../contracts/classify";
 import type { Segment } from "../contracts/segment";
-import { BASELINE_EXPECTED, CLAUSE_TYPES, clauseTypeLabel, contractTypeLabel, type ClauseType, type ContractType, type Severity } from "../contracts/types";
+import { BASELINE_EXPECTED, CLAUSE_TYPES, clauseTypeLabel, contractTypeLabel, type ClauseType, type ContractType, type Severity, lowerLabel } from "../contracts/types";
 import { cosine, TfIdf, tokenize, type Vector } from "../text/similarity";
 import { DocText, excerpt, unwrapLines } from "../text/locate";
 import type { ClauseMatch, Finding, ReviewResult } from "../review/types";
@@ -121,8 +121,9 @@ export function runBoilerplateCheck(input: {
 }): Pick<ReviewResult, "clauses" | "comparedWith" | "coverage"> & { findings: Finding[] } {
   const { doc, segments, contractType, repository } = input;
   const findings: Finding[] = [];
-  let n = 0;
-  const id = () => `bp-${++n}`;
+  // Ids and rule keys describe what a finding is about, not its order, so
+  // feedback stays attached to the right finding across re-runs and reviews.
+  const slug = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
   // Build a shared vocabulary over the repository and this contract.
   const repoClauses: RepoClause[] = [];
@@ -140,7 +141,8 @@ export function runBoilerplateCheck(input: {
       docType: d.contractType,
       heading: c.heading,
       text: c.text,
-      types: classified.types.length ? classified.types : [c.clauseType as ClauseType],
+      // the stored type comes first: people may have corrected it
+      types: [c.clauseType as ClauseType, ...classified.types.filter((t) => t !== c.clauseType)],
       vector: idf.vector(tokens),
     });
   }
@@ -182,14 +184,15 @@ export function runBoilerplateCheck(input: {
     }
     const count = typeCounts.get(type);
     findings.push({
-      id: id(),
+      id: `bp-missing-${type}`,
+      ruleKey: `bp:missing:${type}`,
       check: "boilerplate",
       category: "Missing clause",
-      title: `No ${clauseTypeLabel(type).toLowerCase()} clause`,
+      title: `No ${lowerLabel(clauseTypeLabel(type))} clause`,
       detail:
         basis === "repository" && count
-          ? `Found in ${count} of ${sameType.length} ${contractTypeLabel(contractType).toLowerCase()}s in the repository, but not in this contract.`
-          : `A standard ${contractTypeLabel(contractType).toLowerCase()} usually includes a ${clauseTypeLabel(type).toLowerCase()} clause.`,
+          ? `Found in ${count} of ${sameType.length} ${lowerLabel(contractTypeLabel(contractType))}s in the repository, but not in this contract.`
+          : `A standard ${lowerLabel(contractTypeLabel(contractType))} usually includes a ${lowerLabel(clauseTypeLabel(type))} clause.`,
       severity: CLAUSE_TYPES[type].importance,
       status: "issue",
       recommendation: "Add the clause, or confirm with the counterparty why it has been left out.",
@@ -219,14 +222,14 @@ export function runBoilerplateCheck(input: {
       const pct = Math.round(similarity * 100);
       if (similarity >= ALIGNED) {
         findings.push({
-          id: id(), check: "boilerplate", category: label, status: "pass", severity: "info",
+          id: `bp-wording-${s.position}`, ruleKey: `bp:wording:${s.type}`, check: "boilerplate", category: label, status: "pass", severity: "info",
           title: `${label} follows standard wording`,
           detail: `${pct}% similar to "${best.docTitle}".`,
           quote, page: s.page,
         });
       } else {
         findings.push({
-          id: id(), check: "boilerplate", category: label, status: "warning",
+          id: `bp-wording-${s.position}`, ruleKey: `bp:wording:${s.type}`, check: "boilerplate", category: label, status: "warning",
           severity: similarity >= DIFFERENT ? downgrade[importance] : importance === "info" ? "low" : downgrade[importance],
           title: similarity >= DIFFERENT ? `${label} differs from standard wording` : `${label} is drafted unlike anything in the repository`,
           detail: `Closest repository match is "${best.docTitle}" at ${pct}% similarity. Compare the two before accepting this wording.`,
@@ -242,7 +245,7 @@ export function runBoilerplateCheck(input: {
       for (const c of repoClauses) top = Math.max(top, cosine(vector, c.vector));
       if (top < 0.2) {
         findings.push({
-          id: id(), check: "boilerplate", category: "Unfamiliar clause", status: "warning", severity: "low",
+          id: `bp-unfamiliar-${s.position}`, ruleKey: "bp:unfamiliar", check: "boilerplate", category: "Unfamiliar clause", status: "warning", severity: "low",
           title: `Unfamiliar clause: ${s.heading}`,
           detail: "Nothing similar appears in the repository. Read it carefully: unusual clauses are where unexpected obligations tend to sit.",
           quote, page: s.page,
@@ -265,7 +268,7 @@ export function runBoilerplateCheck(input: {
     const hit = doc.find(r.re);
     if (!hit) continue;
     findings.push({
-      id: id(), check: "boilerplate", category: "One-sided term", status: "issue", severity: r.severity,
+      id: `bp-onesided-${slug(r.title)}`, ruleKey: `bp:one-sided:${slug(r.title)}`, check: "boilerplate", category: "One-sided term", status: "issue", severity: r.severity,
       title: r.title, detail: r.detail, quote: hit.quote, page: hit.page, recommendation: r.recommendation,
     });
   }

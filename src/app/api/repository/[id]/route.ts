@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { jsonError } from "@/lib/api";
 import { deleteFile } from "@/lib/storage";
+import { learnContractType } from "@/lib/learning";
 import { CONTRACT_TYPE_KEYS, type ContractType } from "@/lib/contracts/types";
 
 type Patch = { title?: string; contractType?: string; counterparty?: string; tags?: string; isTemplate?: boolean; notes?: string };
@@ -16,8 +17,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (typeof body.tags === "string") data.tags = body.tags.split(/[;,]/).map((t) => t.trim()).filter(Boolean).join(";");
   if (typeof body.isTemplate === "boolean") data.isTemplate = body.isTemplate;
   if (typeof body.notes === "string") data.notes = body.notes.slice(0, 5000);
-  const doc = await prisma.document.updateMany({ where: { id, kind: "REPOSITORY" }, data });
-  if (!doc.count) return jsonError("Contract not found.", 404);
+  const existing = await prisma.document.findFirst({ where: { id, kind: "REPOSITORY" }, select: { title: true, text: true, contractType: true } });
+  if (!existing) return jsonError("Contract not found.", 404);
+  await prisma.document.update({ where: { id }, data });
+  // Choosing a contract's type by hand teaches type detection.
+  if (data.contractType) await learnContractType(id, data.title ?? existing.title, existing.text, data.contractType as ContractType, existing.contractType);
   return NextResponse.json({ ok: true });
 }
 

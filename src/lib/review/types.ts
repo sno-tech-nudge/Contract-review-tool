@@ -18,7 +18,21 @@ export type Finding = {
   recommendation?: string;
   reference?: string; // law or source the finding rests on
   suggestion?: { text: string; source: string; documentId?: string };
+  // Identifies the check across reviews, so feedback on it can be learned from.
+  ruleKey?: string;
+  // Set when past feedback changed this finding (see src/lib/learning/calibration.ts).
+  learning?: { effect: "muted" | "downgraded" | "promoted"; reason: string; originalSeverity: Severity };
 };
+
+// Findings saved before rule keys existed get one derived from their id.
+export function ruleKeyOf(f: Pick<Finding, "id" | "ruleKey" | "check" | "category" | "title">): string {
+  if (f.ruleKey) return f.ruleKey;
+  if (f.id.startsWith("legal-")) return `legal:${f.id.slice(6)}`;
+  if (f.id.startsWith("biz-")) return `biz:${f.id.slice(4)}`;
+  return `${f.check}:${(f.category + " " + f.title).toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 80)}`;
+}
+
+export const isMuted = (f: Finding) => f.learning?.effect === "muted";
 
 export type KeyTerm = { label: string; value: string; quote?: string; page?: number };
 
@@ -35,6 +49,7 @@ export type ReviewResult = {
   contractType: string;
   detectedType: string;
   detectedConfidence: number;
+  detectedLearned?: boolean; // the type came from the model trained on corrections
   summary: string;
   summarySource: "ai" | "rules";
   keyTerms: KeyTerm[];
@@ -63,6 +78,7 @@ const WEIGHT: Record<Severity, number> = { critical: 25, high: 12, medium: 5, lo
 export function riskScore(findings: Finding[]): number {
   let points = 0;
   for (const f of findings) {
+    if (isMuted(f)) continue;
     if (f.status === "issue") points += WEIGHT[f.severity];
     else if (f.status === "warning") points += WEIGHT[f.severity] / 2;
   }

@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { FileSearch, FolderOpen, Library, ListChecks } from "lucide-react";
+import { FileSearch, FolderOpen, GraduationCap, Library, ListChecks } from "lucide-react";
 
 const LINKS = [
   { href: "/", label: "Review", icon: FileSearch, match: (p: string) => p === "/" || p.startsWith("/review") },
   { href: "/repository", label: "Repository", icon: FolderOpen, match: (p: string) => p.startsWith("/repository") },
   { href: "/library", label: "Clause library", icon: Library, match: (p: string) => p.startsWith("/library") },
   { href: "/rules", label: "Rules", icon: ListChecks, match: (p: string) => p.startsWith("/rules") },
+  { href: "/learning", label: "Learning", icon: GraduationCap, match: (p: string) => p.startsWith("/learning") },
 ];
 
 export function NavLinks() {

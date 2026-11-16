@@ -1,5 +1,4 @@
 import { prisma } from "../db";
-import { detectContractType } from "../contracts/classify";
 import { segment } from "../contracts/segment";
 import { CONTRACT_TYPE_KEYS, type ContractType } from "../contracts/types";
 import { runBoilerplateCheck } from "../checks/boilerplate";
@@ -8,7 +7,9 @@ import { extractKeyTerms, ruleSummary } from "../checks/keyterms";
 import { disabledLegalRules, runLegalCheck } from "../checks/legal";
 import { DocText } from "../text/locate";
 import { aiEnabled, aiModel } from "../ai/claude";
-import { riskScore, SEVERITY_ORDER, type Finding, type ReviewResult } from "./types";
+import { guessContractType, learnContractType, learnedClauseType, loadLearnedModels } from "../learning";
+import { applyCalibration, loadCalibration } from "../learning/calibration";
+import { isMuted, riskScore, SEVERITY_ORDER, type Finding, type ReviewResult } from "./types";
 
 const STATUS_ORDER = { issue: 0, warning: 1, pass: 2 } as const;
 
@@ -22,7 +23,8 @@ export function sortFindings(findings: Finding[]): Finding[] {
 export async function runReview(documentId: string, opts: { contractType?: ContractType; reviewId?: string } = {}) {
   const document = await prisma.document.findUniqueOrThrow({ where: { id: documentId } });
   const doc = new DocText(JSON.parse(document.pagesJson) as string[]);
-  const detected = detectContractType(doc.full);
+  const models = await loadLearnedModels();
+  const detected = guessContractType(doc.full, models);
   const contractType: ContractType =
     opts.contractType && CONTRACT_TYPE_KEYS.includes(opts.contractType)
       ? opts.contractType
@@ -31,24 +33,30 @@ export async function runReview(documentId: string, opts: { contractType?: Contr
   if (contractType !== document.contractType) {
     await prisma.document.update({ where: { id: documentId }, data: { contractType } });
   }
+  // Someone picked the type by hand: remember it so detection improves.
+  if (opts.contractType && opts.contractType === contractType) {
+    await learnContractType(documentId, document.title, doc.full, contractType, detected.type);
+  }
 
   await ensureStarterRules();
-  const [repository, disabled, businessRules] = await Promise.all([
+  const [repository, disabled, businessRules, calibration] = await Promise.all([
     prisma.document.findMany({
       where: { kind: "REPOSITORY" },
       select: { id: true, title: true, contractType: true, isTemplate: true, text: true, clauses: { select: { heading: true, text: true, clauseType: true } } },
     }),
     disabledLegalRules(),
     prisma.businessRule.findMany({ orderBy: { createdAt: "asc" } }),
+    loadCalibration(),
   ]);
 
-  const segments = segment(doc);
+  const segments = segment(doc, (h, t) => learnedClauseType(h, t, models));
   const boilerplate = runBoilerplateCheck({ doc, segments, contractType, repository });
   const legal = runLegalCheck(doc, contractType, disabled);
   const business = runBusinessCheck(doc, segments, contractType, businessRules);
   const keyTerms = extractKeyTerms(doc);
 
-  const findings = sortFindings([...boilerplate.findings, ...legal.findings, ...business.findings]);
+  // Past feedback mutes, lowers or raises checks for this contract type.
+  const findings = sortFindings(applyCalibration([...boilerplate.findings, ...legal.findings, ...business.findings], contractType, calibration));
 
   // Keep any AI findings from an earlier run of the same review.
   let previousAi: Finding[] = [];
@@ -57,7 +65,11 @@ export async function runReview(documentId: string, opts: { contractType?: Contr
     const existing = await prisma.review.findUnique({ where: { id: opts.reviewId } });
     if (existing) {
       previous = JSON.parse(existing.resultJson) as ReviewResult;
-      previousAi = previous.findings.filter((f) => f.check === "ai");
+      previousAi = applyCalibration(
+        previous.findings.filter((f) => f.check === "ai").map(({ learning, ...f }) => ({ ...f, severity: learning?.originalSeverity ?? f.severity })),
+        contractType,
+        calibration
+      );
     }
   }
 
@@ -65,7 +77,8 @@ export async function runReview(documentId: string, opts: { contractType?: Contr
     contractType,
     detectedType: detected.type,
     detectedConfidence: detected.confidence,
-    summary: previous?.summarySource === "ai" ? previous.summary : ruleSummary(contractType, keyTerms, findings),
+    detectedLearned: detected.learned,
+    summary: previous?.summarySource === "ai" ? previous.summary : ruleSummary(contractType, keyTerms, findings.filter((f) => !isMuted(f))),
     summarySource: previous?.summarySource === "ai" ? "ai" : "rules",
     keyTerms: previous?.summarySource === "ai" && previous.keyTerms.length ? previous.keyTerms : keyTerms,
     findings: sortFindings([...findings, ...previousAi]),

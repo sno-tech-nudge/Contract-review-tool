@@ -17,6 +17,7 @@ The contract is shown as a PDF on the left and the review on the right. Clicking
 | **Repository** (`/repository`) | The knowledge base and document store. Drag in many files at once, sort into folders by contract type, mark approved templates, search contents |
 | **Clause library** (`/library`) | Every indexed clause by topic, ready to copy |
 | **Rules** (`/rules`) | Switch built-in legal checks on or off; add and edit business rules |
+| **Learning** (`/learning`) | What the tool has learned from the team: each check's track record per contract type, rules suggested from flagged misses, and a history of every change |
 
 ## Running locally
 
@@ -72,6 +73,17 @@ Changing `APP_PASSWORD` or `AUTH_SECRET` signs everyone out. To change the datab
 - `src/lib/review/run.ts` runs everything and stores the result. `src/lib/ai/claude.ts` adds the optional AI review.
 
 Checks look for wording, so a pass means a contract addresses a point, not that it is legally sufficient. The tool prepares a contract for legal review; it does not replace it.
+
+## How it learns
+
+The tool improves from the team's everyday use, with no separate training step (`src/lib/learning/`):
+
+- **Feedback on findings.** Every finding has *Useful* / *Not relevant*. Each check builds a track record per contract type (`calibration.ts`). After 2 "not relevant" votes a check is lowered one severity level, after 3 it is muted for that contract type, and after 3 "useful" votes it is raised (never above High). Muted checks stay visible, collapsed, at the bottom of each review, and anyone can force a check on or off from the Learning page.
+- **Flagged misses.** *Flag a miss* on a review records something the checks didn't catch. The Learning page turns each one into a suggested business rule built around the passage's most distinctive phrase (`suggest.ts`), created in one click.
+- **Corrections.** Changing a contract's type, or a clause's type on a repository contract, is stored as a confirmed example. A new contract or clause that closely matches a confirmed example takes the team's label (`classifier.ts`, nearest neighbour; thresholds measured on our contracts: same template scores 0.7+, unrelated contracts at most 0.33). Otherwise the keyword rules decide.
+- **The repository.** Every contract filed there refines what "standard" means per type: expected clauses, usual wording and suggested text.
+
+Every change in behaviour is logged with its reason on the Learning page, and lessons survive if the review they came from is deleted.
 
 ## Storage
 

@@ -2,8 +2,8 @@ import { prisma } from "../db";
 import { extractText, mergeOcr, mimeFor } from "../extract";
 import { deleteFile, saveFile } from "../storage";
 import { DocText } from "../text/locate";
-import { detectContractType } from "./classify";
 import { segment } from "./segment";
+import { guessContractType, learnContractType, learnedClauseType, loadLearnedModels } from "../learning";
 import type { ContractType } from "./types";
 
 export type IngestOptions = {
@@ -15,6 +15,7 @@ export type IngestOptions = {
   isTemplate?: boolean;
   storageKey?: string; // set when the file is already in storage (direct browser upload)
   ocrPages?: unknown; // per-page text recognised in the browser for scanned pages
+  learnType?: boolean; // false when contractType is a carried-over guess, not a person's choice
 };
 
 export class IngestError extends Error {}
@@ -49,11 +50,12 @@ async function ingest(buffer: Buffer, fileName: string, opts: IngestOptions) {
     throw new IngestError("No readable text found. If this is a scanned PDF, upload it again here and let the text recognition finish.");
   }
 
-  const detected = detectContractType(doc.full);
-  const segments = segment(doc);
+  const models = await loadLearnedModels();
+  const detected = guessContractType(doc.full, models);
+  const segments = segment(doc, (h, t) => learnedClauseType(h, t, models));
   const storageKey = opts.storageKey ?? (await saveFile(buffer, fileName, mimeType));
 
-  return prisma.document.create({
+  const created = await prisma.document.create({
     data: {
       kind: opts.kind,
       title: opts.title?.trim() || titleFromFileName(fileName),
@@ -80,4 +82,8 @@ async function ingest(buffer: Buffer, fileName: string, opts: IngestOptions) {
       },
     },
   });
+
+  // A type chosen by a person (a folder, a picker) is a confirmed example to learn from.
+  if (opts.contractType && opts.learnType !== false) await learnContractType(created.id, created.title, doc.full, opts.contractType, detected.type);
+  return created;
 }

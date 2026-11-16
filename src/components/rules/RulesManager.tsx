@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Pencil, Plus, Trash2, X } from "lucide-react";
 import { BUSINESS_RULE_KINDS, type BusinessRuleKind } from "@/lib/checks/business-kinds";
-import { CLAUSE_TYPES, CLAUSE_TYPE_KEYS, CONTRACT_TYPES, CONTRACT_TYPE_KEYS, clauseTypeLabel, contractTypeLabel, type Severity } from "@/lib/contracts/types";
+import { CLAUSE_TYPES, CLAUSE_TYPE_KEYS, CONTRACT_TYPES, CONTRACT_TYPE_KEYS, clauseTypeLabel, contractTypeLabel, type Severity, lowerLabel } from "@/lib/contracts/types";
 import { SEVERITY_LABEL } from "@/lib/review/types";
 import { SeverityBadge } from "@/components/ui";
 import { useToast } from "@/components/Toast";
@@ -35,7 +35,7 @@ function describeRule(r: BusinessRow): string {
     case "FORBID_PHRASE":
       return `Must not mention: ${list.map((p) => `"${p}"`).join(", ")}`;
     case "REQUIRE_CLAUSE":
-      return `Must include a ${clauseTypeLabel(r.pattern).toLowerCase()} clause`;
+      return `Must include a ${lowerLabel(clauseTypeLabel(r.pattern))} clause`;
     case "MAX_DAYS":
       return `No more than ${r.threshold} days${list.length ? ` where the sentence mentions ${list.slice(0, 4).join(", ")}${list.length > 4 ? "…" : ""}` : ""}`;
     case "MAX_AMOUNT":
@@ -45,12 +45,13 @@ function describeRule(r: BusinessRow): string {
   }
 }
 
-export function RulesManager({ initialTab, laws, legal, business }: { initialTab: "legal" | "business"; laws: { key: string; label: string; description: string }[]; legal: LegalRow[]; business: BusinessRow[] }) {
+export function RulesManager({ initialTab, laws, legal, business, prefill }: { initialTab: "legal" | "business"; laws: { key: string; label: string; description: string }[]; legal: LegalRow[]; business: BusinessRow[]; prefill?: (Draft & { missedId: string }) | null }) {
   const router = useRouter();
   const toast = useToast();
   const [tab, setTab] = useState(initialTab);
   const [legalState, setLegalState] = useState(legal);
-  const [draft, setDraft] = useState<Draft | null>(null);
+  const [draft, setDraft] = useState<Draft | null>(prefill ? { ...prefill } : null);
+  const [missedId, setMissedId] = useState(prefill?.missedId ?? null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -79,6 +80,11 @@ export function RulesManager({ initialTab, laws, legal, business }: { initialTab
     const json = await res.json();
     setSaving(false);
     if (!res.ok) return setError(json.error ?? "Could not save the rule");
+    // A rule made from a flagged miss closes that miss.
+    if (missedId && !id) {
+      await fetch(`/api/learning/missed/${missedId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "rule_created", ruleName: body.name }) });
+      setMissedId(null);
+    }
     setDraft(null);
     toast(id ? "Rule updated" : "Rule added. It applies to the next review, or re-run an existing one.");
     router.refresh();

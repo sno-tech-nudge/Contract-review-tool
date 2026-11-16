@@ -1,5 +1,9 @@
 import { DocText } from "../text/locate";
 import { classifyClause, type ClauseClassification } from "./classify";
+import type { ClauseType } from "./types";
+
+// Lets a model trained on people's corrections override the keyword type.
+export type ClauseOverride = (heading: string, text: string) => ClauseType | null;
 
 export type Segment = {
   position: number;
@@ -45,7 +49,7 @@ function toLines(full: string): Line[] {
 // Splits a contract into top-level clauses. Prefers numbered headings
 // ("1.", "Article 2", "3 TERMINATION"), falls back to capitalised headings,
 // and finally to paragraph chunks for unstructured text.
-export function segment(doc: DocText): Segment[] {
+export function segment(doc: DocText, learned?: ClauseOverride): Segment[] {
   const lines = toLines(doc.full);
   const boundaries: { index: number; heading: string }[] = [];
 
@@ -109,8 +113,13 @@ export function segment(doc: DocText): Segment[] {
         text,
         page: doc.pageAt(r.start),
         start: r.start,
-        ...classifyClause(heading, text, i === 0 && r.heading === "Preamble"),
+        ...withLearned(classifyClause(heading, text, i === 0 && r.heading === "Preamble"), learned?.(heading, text) ?? null),
       };
     })
     .filter((s) => s.text.length > 20);
+}
+
+function withLearned(c: ClauseClassification, learned: ClauseType | null): ClauseClassification {
+  if (!learned || learned === c.type || c.type === "parties") return c;
+  return { ...c, type: learned, types: [learned, ...c.types.filter((t) => t !== learned)] };
 }

@@ -20,6 +20,7 @@ export function runLegalCheck(doc: DocText, contractType: ContractType, disabled
     const quote = outcome.evidence?.quote || undefined;
     findings.push({
       id: `legal-${rule.id}`,
+      ruleKey: `legal:${rule.id}`,
       check: "legal",
       category: LAWS[rule.law].label,
       title: rule.title,

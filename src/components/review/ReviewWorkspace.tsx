@@ -3,14 +3,14 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FileDown, FolderPlus, RefreshCw, Sparkles, Trash2 } from "lucide-react";
-import { CONTRACT_TYPES, CONTRACT_TYPE_KEYS, clauseTypeLabel, contractTypeLabel } from "@/lib/contracts/types";
-import { riskBand, type CheckKind, type Finding, type ReviewResult } from "@/lib/review/types";
+import { FileDown, Flag, FolderPlus, GraduationCap, RefreshCw, Sparkles, Trash2, X } from "lucide-react";
+import { CONTRACT_TYPES, CONTRACT_TYPE_KEYS, clauseTypeLabel, contractTypeLabel, lowerLabel } from "@/lib/contracts/types";
+import { isMuted, riskBand, SEVERITY_LABEL, type CheckKind, type Finding, type ReviewResult, type Severity } from "@/lib/review/types";
 import { DocumentViewer } from "@/components/viewer/DocumentViewer";
 import type { Focus } from "@/components/viewer/match";
 import { useToast } from "@/components/Toast";
 import { formatDate } from "@/components/ui";
-import { FindingCard } from "./FindingCard";
+import { FindingCard, type FeedbackVerdict, type FindingFeedbackState } from "./FindingCard";
 
 type Tab = "overview" | CheckKind;
 type Filter = "open" | "issue" | "all";
@@ -21,7 +21,11 @@ type Props = {
   document: { id: string; title: string; fileName: string; mimeType: string; pageCount: number; scanned: boolean; text: string };
   aiAvailable: boolean;
   lawDescriptions: Record<string, string>;
+  feedback: Record<string, FindingFeedbackState>;
+  missed: MissedItem[];
 };
+
+export type MissedItem = { id: string; quote: string; note: string; severity: string; page: number | null };
 
 const CHECKS: { key: CheckKind; label: string; index: string; blurb: string }[] = [
   { key: "boilerplate", label: "Boilerplate", index: "/01", blurb: "Clauses and wording compared with the repository" },
@@ -29,7 +33,7 @@ const CHECKS: { key: CheckKind; label: string; index: string; blurb: string }[] 
   { key: "business", label: "Business", index: "/03", blurb: "Our own rules" },
 ];
 
-export function ReviewWorkspace({ review, result, document: doc, aiAvailable, lawDescriptions }: Props) {
+export function ReviewWorkspace({ review, result, document: doc, aiAvailable, lawDescriptions, feedback: initialFeedback, missed: initialMissed }: Props) {
   const router = useRouter();
   const toast = useToast();
   const [tab, setTab] = useState<Tab>("overview");
@@ -39,19 +43,87 @@ export function ReviewWorkspace({ review, result, document: doc, aiAvailable, la
   const [openIds, setOpenIds] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState<string | null>(null);
   const [aiRunning, setAiRunning] = useState(false);
+  const [feedback, setFeedback] = useState(initialFeedback);
+  const [missed, setMissed] = useState(initialMissed);
+  const [flagging, setFlagging] = useState<{ quote: string; note: string; severity: Severity } | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
 
+  // Findings muted by past feedback are kept out of counts and lists, but
+  // stay one click away so nobody wonders where a check went.
+  const active = useMemo(() => result.findings.filter((f) => !isMuted(f)), [result.findings]);
   const byCheck = useMemo(() => {
     const m: Record<CheckKind, Finding[]> = { boilerplate: [], legal: [], business: [], ai: [] };
-    for (const f of result.findings) m[f.check].push(f);
+    for (const f of active) m[f.check].push(f);
+    return m;
+  }, [active]);
+  const mutedByCheck = useMemo(() => {
+    const m: Record<CheckKind, Finding[]> = { boilerplate: [], legal: [], business: [], ai: [] };
+    for (const f of result.findings) if (isMuted(f)) m[f.check].push(f);
     return m;
   }, [result.findings]);
 
   const count = (fs: Finding[], status?: Finding["status"]) => fs.filter((f) => (status ? f.status === status : f.status !== "pass")).length;
   const band = riskBand(review.riskScore);
-  const issues = count(result.findings, "issue");
-  const warnings = count(result.findings, "warning");
-  const passed = count(result.findings, "pass");
+  const issues = count(active, "issue");
+  const warnings = count(active, "warning");
+  const passed = count(active, "pass");
+
+  const sendFeedback = useCallback(
+    async (f: Finding, verdict: FeedbackVerdict | null, reason = "") => {
+      setFeedback((m) => {
+        const n = { ...m };
+        if (verdict) n[f.id] = { verdict, reason };
+        else delete n[f.id];
+        return n;
+      });
+      try {
+        const res = await fetch(`/api/reviews/${review.id}/feedback`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ findingId: f.id, verdict, reason }),
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error);
+        const type = lowerLabel(contractTypeLabel(result.contractType));
+        if (json.changed) {
+          toast(
+            json.effect === "muted"
+              ? `Learned: "${f.title}" will be muted in future ${type} reviews.`
+              : json.effect === "downgraded"
+                ? `Learned: "${f.title}" will be lower priority in future ${type} reviews.`
+                : json.effect === "promoted"
+                  ? `Learned: "${f.title}" will be higher priority in future ${type} reviews.`
+                  : `"${f.title}" is back to normal for ${type}s.`
+          );
+        } else if (verdict && !reason) {
+          toast("Thanks. This feedback trains future reviews.");
+        }
+      } catch {
+        toast("Could not save your feedback", "error");
+      }
+    },
+    [result.contractType, review.id, toast]
+  );
+
+  const startFlag = () => {
+    // A passage selected in the contract becomes the quote.
+    const selected = window.getSelection()?.toString().replace(/\s+/g, " ").trim() ?? "";
+    setFlagging({ quote: selected.slice(0, 2000), note: "", severity: "medium" });
+  };
+
+  const submitFlag = async () => {
+    if (!flagging?.note.trim()) return;
+    const res = await fetch(`/api/reviews/${review.id}/missed`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(flagging) });
+    const json = await res.json();
+    if (!res.ok) return toast(json.error ?? "Could not save", "error");
+    setMissed((m) => [...m, json]);
+    setFlagging(null);
+    toast(
+      <>
+        Thanks. It&apos;s on the <Link href="/learning">Learning page</Link>, ready to become a rule.
+      </>
+    );
+  };
 
   const locate = useCallback((f: { id?: string; quote?: string; page?: number }) => {
     if (f.id) setActiveId(f.id);
@@ -119,7 +191,7 @@ export function ReviewWorkspace({ review, result, document: doc, aiAvailable, la
       if (kind === "rerun") {
         const res = await fetch(`/api/reviews/${review.id}/rerun`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contractType }) });
         if (!res.ok) throw new Error();
-        toast(contractType ? `Re-checked as ${contractTypeLabel(contractType).toLowerCase()}` : "Checks re-run with the latest repository and rules");
+        toast(contractType ? `Re-checked as ${lowerLabel(contractTypeLabel(contractType))}` : "Checks re-run with the latest repository and rules");
         router.refresh();
       } else if (kind === "repo") {
         const res = await fetch(`/api/reviews/${review.id}/to-repository`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
@@ -164,11 +236,32 @@ export function ReviewWorkspace({ review, result, document: doc, aiAvailable, la
           {describe?.(cat) && <span className="group__desc">{describe(cat)}</span>}
         </div>
         {fs.map((f) => (
-          <FindingCard key={f.id} finding={f} active={activeId === f.id} open={openIds.has(f.id)} onToggle={() => toggle(f.id)} onLocate={locate} />
+          <FindingCard
+            key={f.id}
+            finding={f}
+            active={activeId === f.id}
+            open={openIds.has(f.id)}
+            onToggle={() => toggle(f.id)}
+            onLocate={locate}
+            feedback={feedback[f.id]}
+            onFeedback={(v, r) => sendFeedback(f, v, r)}
+          />
         ))}
       </div>
     ));
   };
+
+  const mutedSection = (check: CheckKind) =>
+    mutedByCheck[check].length > 0 && (
+      <details className="muted-group">
+        <summary>
+          <GraduationCap size={14} /> {mutedByCheck[check].length} check{mutedByCheck[check].length === 1 ? "" : "s"} muted by your team&apos;s feedback
+        </summary>
+        {mutedByCheck[check].map((f) => (
+          <FindingCard key={f.id} finding={f} active={activeId === f.id} open={openIds.has(f.id)} onToggle={() => toggle(f.id)} onLocate={locate} feedback={feedback[f.id]} onFeedback={(v, r) => sendFeedback(f, v, r)} />
+        ))}
+      </details>
+    );
 
   const filterBar = (check: CheckKind) => (
     <div className="toolbar">
@@ -226,7 +319,15 @@ export function ReviewWorkspace({ review, result, document: doc, aiAvailable, la
                 ))}
               </select>
             </span>
-            {result.contractType === result.detectedType ? <span className="faint">detected</span> : <span className="faint">set manually</span>}
+            {result.contractType !== result.detectedType ? (
+              <span className="faint">set manually</span>
+            ) : result.detectedLearned ? (
+              <span className="faint" title="Detected by the model trained on your team's corrections">
+                learned from your corrections
+              </span>
+            ) : (
+              <span className="faint">detected</span>
+            )}
             <span aria-hidden>·</span>
             <span className="num">
               {doc.pageCount} page{doc.pageCount === 1 ? "" : "s"}
@@ -337,7 +438,7 @@ export function ReviewWorkspace({ review, result, document: doc, aiAvailable, la
               </div>
 
               {(() => {
-                const top = result.findings.filter((f) => f.status === "issue" && (f.severity === "critical" || f.severity === "high")).slice(0, 6);
+                const top = active.filter((f) => f.status === "issue" && (f.severity === "critical" || f.severity === "high")).slice(0, 6);
                 return top.length ? (
                   <div className="block">
                     <div className="block__head">
@@ -345,11 +446,47 @@ export function ReviewWorkspace({ review, result, document: doc, aiAvailable, la
                       <span className="caption">Most serious issues first</span>
                     </div>
                     {top.map((f) => (
-                      <FindingCard key={f.id} finding={f} showCheck active={activeId === f.id} open={openIds.has(f.id)} onToggle={() => toggle(f.id)} onLocate={locate} />
+                      <FindingCard
+                        key={f.id}
+                        finding={f}
+                        showCheck
+                        active={activeId === f.id}
+                        open={openIds.has(f.id)}
+                        onToggle={() => toggle(f.id)}
+                        onLocate={locate}
+                        feedback={feedback[f.id]}
+                        onFeedback={(v, r) => sendFeedback(f, v, r)}
+                      />
                     ))}
                   </div>
                 ) : null;
               })()}
+
+              {missed.length > 0 && (
+                <div className="block">
+                  <div className="block__head">
+                    <span className="kicker">Flagged by your team</span>
+                    <Link href="/learning" className="caption">
+                      Turn into rules
+                    </Link>
+                  </div>
+                  {missed.map((m) => (
+                    <div className="missed-item" key={m.id}>
+                      <p>
+                        <span className={`badge badge--label ${m.severity === "critical" ? "badge--clay-solid" : m.severity === "high" ? "badge--clay" : m.severity === "medium" ? "badge--gold" : "badge--outline"}`}>
+                          {SEVERITY_LABEL[m.severity as Severity] ?? m.severity}
+                        </span>{" "}
+                        {m.note}
+                      </p>
+                      {m.quote && (
+                        <button className="quote" style={{ marginTop: "var(--space-2)" }} onClick={() => locate({ quote: m.quote, page: m.page ?? undefined })}>
+                          “{m.quote}”
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {result.comparedWith.length > 0 && (
                 <div className="block">
@@ -393,13 +530,14 @@ export function ReviewWorkspace({ review, result, document: doc, aiAvailable, la
                   expected clauses are present.{" "}
                   <span className="muted">
                     {result.coverage.basis === "repository"
-                      ? `Expected clauses are learned from ${result.coverage.basisCount} ${contractTypeLabel(result.contractType).toLowerCase()}s in the repository.`
+                      ? `Expected clauses are learned from ${result.coverage.basisCount} ${lowerLabel(contractTypeLabel(result.contractType))}s in the repository.`
                       : `Based on a standard checklist${result.checksRun.repositoryDocs ? "" : ". Add contracts to the repository and this check will learn from them"}.`}
                   </span>
                 </p>
               </div>
               {filterBar("boilerplate")}
               {visibleFindings("boilerplate").length ? renderGroups(visibleFindings("boilerplate")) : <p className="caption">Nothing to show for this filter.</p>}
+              {mutedSection("boilerplate")}
 
               <div className="block" style={{ marginTop: "var(--space-6)" }}>
                 <div className="block__head">
@@ -447,6 +585,7 @@ export function ReviewWorkspace({ review, result, document: doc, aiAvailable, la
               ) : (
                 <p className="caption">Nothing to show for this filter. {result.checksRun.legalRules} legal checks applied to this contract.</p>
               )}
+              {mutedSection("legal")}
               <p className="disclaimer">
                 Legal checks reflect the law as understood in October 2026, including the Income-tax Act, 2025 and DPDP Rules, 2025. They flag points to confirm with counsel and are not legal advice.
               </p>
@@ -466,6 +605,7 @@ export function ReviewWorkspace({ review, result, document: doc, aiAvailable, la
                 <>
                   {filterBar("business")}
                   {visibleFindings("business").length ? renderGroups(visibleFindings("business")) : <p className="caption">Nothing to show for this filter.</p>}
+                  {mutedSection("business")}
                   <p className="caption" style={{ marginTop: "var(--space-4)" }}>
                     {result.checksRun.businessRules} rule{result.checksRun.businessRules === 1 ? "" : "s"} applied. <Link href="/rules?tab=business">Manage business rules</Link>
                   </p>
@@ -484,6 +624,7 @@ export function ReviewWorkspace({ review, result, document: doc, aiAvailable, la
                     Risks Claude found that the rule checks did not cover.
                   </p>
                   {byCheck.ai.length ? renderGroups(byCheck.ai) : <p className="caption">No additional risks found.</p>}
+                  {mutedSection("ai")}
                 </>
               )}
             </>
@@ -494,6 +635,9 @@ export function ReviewWorkspace({ review, result, document: doc, aiAvailable, la
           <a className="btn btn--sm" href={`/review/${review.id}/report`} target="_blank" rel="noreferrer">
             <FileDown /> Export report
           </a>
+          <button className="btn btn--secondary btn--sm" onClick={startFlag} title="Select a passage in the contract first to quote it">
+            <Flag /> Flag a miss
+          </button>
           <button className="btn btn--secondary btn--sm" onClick={() => act("repo")} disabled={!!busy}>
             <FolderPlus /> Add to repository
           </button>
@@ -505,6 +649,61 @@ export function ReviewWorkspace({ review, result, document: doc, aiAvailable, la
           </button>
         </div>
       </section>
+
+      {flagging && (
+        <div className="modal-back" onMouseDown={(e) => e.target === e.currentTarget && setFlagging(null)}>
+          <div className="modal" role="dialog" aria-modal="true" aria-labelledby="flag-title">
+            <div className="modal__head">
+              <h3 id="flag-title">Flag something the checks missed</h3>
+              <button className="btn btn--ghost btn--icon" onClick={() => setFlagging(null)} aria-label="Close">
+                <X />
+              </button>
+            </div>
+            <div className="modal__body">
+              <p className="caption" style={{ margin: 0 }}>
+                The tool learns from this: recurring misses show up on the Learning page as suggested business rules.
+              </p>
+              <label className="field">
+                <span className="field__label">What&apos;s the problem?</span>
+                <input
+                  className="input"
+                  autoFocus
+                  value={flagging.note}
+                  placeholder="e.g. Funder can use our beneficiary data for its own marketing"
+                  onChange={(e) => setFlagging({ ...flagging, note: e.target.value })}
+                />
+              </label>
+              <label className="field">
+                <span className="field__label">Passage from the contract</span>
+                <textarea
+                  className="textarea"
+                  value={flagging.quote}
+                  placeholder="Select text in the contract before clicking Flag a miss, or paste it here"
+                  onChange={(e) => setFlagging({ ...flagging, quote: e.target.value })}
+                />
+              </label>
+              <label className="field" style={{ maxWidth: 220 }}>
+                <span className="field__label">How serious?</span>
+                <select className="select" value={flagging.severity} onChange={(e) => setFlagging({ ...flagging, severity: e.target.value as Severity })}>
+                  {(["critical", "high", "medium", "low"] as Severity[]).map((sv) => (
+                    <option key={sv} value={sv}>
+                      {SEVERITY_LABEL[sv]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="modal__foot">
+              <button className="btn btn--ghost btn--sm" onClick={() => setFlagging(null)}>
+                Cancel
+              </button>
+              <button className="btn btn--sm" onClick={submitFlag} disabled={!flagging.note.trim()}>
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

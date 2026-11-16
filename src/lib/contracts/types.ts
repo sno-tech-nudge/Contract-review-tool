@@ -54,6 +54,12 @@ export function contractTypeLabel(key: string): string {
   return (CONTRACT_TYPES as Record<string, { label: string }>)[key]?.label ?? "Other";
 }
 
+// A label for use mid-sentence: ordinary words lower-cased, acronyms kept
+// ("CSR agreement", "MoU", "grant agreement").
+export function lowerLabel(label: string): string {
+  return label.replace(/\b[A-Z][a-z]+\b/g, (w) => w.toLowerCase());
+}
+
 type ClauseDef = {
   label: string;
   heading: string[]; // strong signals when they appear in the clause heading

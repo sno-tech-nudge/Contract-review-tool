@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { ArrowLeft, Save, Trash2 } from "lucide-react";
-import { CONTRACT_TYPES, CONTRACT_TYPE_KEYS, clauseTypeLabel } from "@/lib/contracts/types";
+import { CLAUSE_TYPES, CLAUSE_TYPE_KEYS, CONTRACT_TYPES, CONTRACT_TYPE_KEYS } from "@/lib/contracts/types";
 import { DocumentViewer } from "@/components/viewer/DocumentViewer";
 import type { Focus } from "@/components/viewer/match";
 import { useToast } from "@/components/Toast";
@@ -34,6 +34,19 @@ export function RepositoryDocument({ doc, clauses }: { doc: Doc; clauses: { id: 
   const [saving, setSaving] = useState(false);
   const [focus, setFocus] = useState<Focus | null>(null);
   const [active, setActive] = useState<string | null>(null);
+  const [clauseTypes, setClauseTypes] = useState<Record<string, string>>(() => Object.fromEntries(clauses.map((c) => [c.id, c.clauseType])));
+
+  // Correcting a clause's type also teaches the clause classifier.
+  const relabel = async (id: string, clauseType: string) => {
+    const before = clauseTypes[id];
+    setClauseTypes((t) => ({ ...t, [id]: clauseType }));
+    const res = await fetch(`/api/clauses/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clauseType }) });
+    if (res.ok) toast("Clause type corrected. The tool learns from this for future contracts.");
+    else {
+      setClauseTypes((t) => ({ ...t, [id]: before }));
+      toast("Could not save the clause type", "error");
+    }
+  };
   const dirty = JSON.stringify(form) !== JSON.stringify({ title: doc.title, contractType: doc.contractType, counterparty: doc.counterparty, tags: doc.tags, isTemplate: doc.isTemplate, notes: doc.notes });
 
   const save = async () => {
@@ -132,11 +145,11 @@ export function RepositoryDocument({ doc, clauses }: { doc: Doc; clauses: { id: 
               <span className="micro num">{clauses.length}</span>
             </div>
             <p className="caption" style={{ marginTop: 0 }}>
-              These are what new contracts are compared against. Click one to see it in the document.
+              These are what new contracts are compared against. Click one to see it in the document; fix a wrong type with its picker, and the tool learns from it.
             </p>
             <ul className="clausemap clausemap--wide">
               {clauses.map((c, i) => (
-                <li key={c.id}>
+                <li key={c.id} className="cm-row">
                   <button
                     onClick={() => {
                       setActive(c.id);
@@ -151,10 +164,14 @@ export function RepositoryDocument({ doc, clauses }: { doc: Doc; clauses: { id: 
                       </span>
                       <span className="cm-type">p.{c.page}</span>
                     </span>
-                    <span className="badge badge--neutral" style={{ justifySelf: "end" }}>
-                      {clauseTypeLabel(c.clauseType)}
-                    </span>
                   </button>
+                  <select className="select cm-type-pick" value={clauseTypes[c.id]} onChange={(e) => relabel(c.id, e.target.value)} aria-label={`Clause type for ${c.heading}`}>
+                    {CLAUSE_TYPE_KEYS.map((k) => (
+                      <option key={k} value={k}>
+                        {CLAUSE_TYPES[k].label}
+                      </option>
+                    ))}
+                  </select>
                 </li>
               ))}
             </ul>

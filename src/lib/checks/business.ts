@@ -1,7 +1,7 @@
 import type { BusinessRule } from "@prisma/client";
 import { prisma } from "../db";
 import type { Segment } from "../contracts/segment";
-import { clauseTypeLabel, type ContractType, type Severity } from "../contracts/types";
+import { clauseTypeLabel, type ContractType, type Severity, lowerLabel } from "../contracts/types";
 import { findAmounts, formatInr } from "../text/amounts";
 import type { DocText } from "../text/locate";
 import type { Finding } from "../review/types";
@@ -27,6 +27,7 @@ export function runBusinessCheck(doc: DocText, segments: Segment[], contractType
     rulesRun++;
     const base = {
       id: `biz-${rule.id}`,
+      ruleKey: `biz:${rule.id}`,
       check: "business" as const,
       category: "Business rule",
       title: rule.name,
@@ -49,7 +50,7 @@ export function runBusinessCheck(doc: DocText, segments: Segment[], contractType
       }
       case "REQUIRE_CLAUSE": {
         const seg = segments.find((s) => s.types.includes(rule.pattern as Segment["type"]));
-        findings.push(seg ? ok(`${clauseTypeLabel(rule.pattern)} clause found.`, seg.text.slice(0, 200), seg.page) : flag(rule.description || `No ${clauseTypeLabel(rule.pattern).toLowerCase()} clause.`));
+        findings.push(seg ? ok(`${clauseTypeLabel(rule.pattern)} clause found.`, seg.text.slice(0, 200), seg.page) : flag(rule.description || `No ${lowerLabel(clauseTypeLabel(rule.pattern))} clause.`));
         break;
       }
       case "MAX_DAYS": {

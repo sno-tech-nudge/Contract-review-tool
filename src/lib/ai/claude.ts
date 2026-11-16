@@ -71,6 +71,7 @@ export async function aiReview(input: { title: string; contractType: string; tex
     keyTerms: parsed.key_terms.map((k) => ({ label: k.label, value: k.value, quote: k.quote })),
     findings: parsed.risks.map((r, i) => ({
       id: `ai-${i + 1}`,
+      ruleKey: `ai:${r.category.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
       check: "ai",
       category: r.category,
       title: r.title,

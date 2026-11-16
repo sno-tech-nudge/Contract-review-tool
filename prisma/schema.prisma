@@ -64,6 +64,8 @@ model Review {
   createdAt    DateTime @default(now())
 
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  feedback FindingFeedback[]
+  missed   MissedIssue[]
 
   @@index([createdAt])
 }
@@ -94,4 +96,80 @@ model LegalRuleSetting {
 model Meta {
   key   String @id
   value String
+}
+
+// ── Learning ────────────────────────────────────────────────────────────
+// The tool improves from what reviewers tell it. See src/lib/learning/.
+
+// "Useful" / "not relevant" on one finding of one review. ruleKey identifies
+// the check across reviews (e.g. legal:fcra-account, bp:missing:indemnity).
+model FindingFeedback {
+  id           String   @id @default(cuid())
+  reviewId     String? // kept (as null) if the review is deleted, so the lesson survives
+  findingId    String
+  ruleKey      String
+  check        String
+  title        String
+  contractType String
+  verdict      String // useful | not_relevant
+  reason       String   @default("")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  review Review? @relation(fields: [reviewId], references: [id], onDelete: SetNull)
+
+  @@unique([reviewId, findingId])
+  @@index([ruleKey, contractType])
+}
+
+// Something a reviewer found that the checks did not.
+model MissedIssue {
+  id           String   @id @default(cuid())
+  reviewId     String?
+  contractType String
+  quote        String
+  note         String
+  severity     String   @default("medium")
+  page         Int?
+  status       String   @default("open") // open | rule_created | dismissed
+  createdAt    DateTime @default(now())
+
+  review Review? @relation(fields: [reviewId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+}
+
+// A person's decision to keep a rule on (or off) regardless of feedback.
+// contractType "*" applies to every type.
+model RuleOverride {
+  ruleKey      String
+  contractType String
+  mode         String // on | off
+  updatedAt    DateTime @updatedAt
+
+  @@id([ruleKey, contractType])
+}
+
+// Confirmed labels that train the classifiers: a contract type a person set,
+// or a clause type a person corrected.
+model TrainingExample {
+  id        String   @id @default(cuid())
+  kind      String // contract_type | clause_type
+  label     String
+  text      String
+  sourceId  String   @default("") // document or clause it came from, so re-labelling replaces it
+  createdAt DateTime @default(now())
+
+  @@unique([kind, sourceId])
+  @@index([kind])
+}
+
+// What changed and why, shown on the learning page.
+model LearningEvent {
+  id        String   @id @default(cuid())
+  kind      String
+  summary   String
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
 }

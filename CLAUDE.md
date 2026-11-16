@@ -19,6 +19,14 @@ This project is the contract review tool, not the^delta prize admin tool describ
 - Postgres rejects NUL bytes in text; `extract.ts` strips them.
 - Scanned PDFs are OCR'd in the browser (`src/lib/ocr-client.ts`, tesseract.js, loaded on demand) and the per-page text travels with the upload as `ocrPages`; the server only uses it for pages with no text layer (`mergeOcr`) and sets `Document.textSource = "ocr"`. Render pages with pdf.js `intent: "print"`: the default display intent waits on animation frames and stalls in background tabs. Anything that re-ingests a stored file (e.g. `to-repository`) must pass the stored `pagesJson` as `ocrPages`, or scanned contracts lose their text.
 
+## Learning (src/lib/learning/)
+
+- Findings carry a stable `ruleKey` (e.g. `legal:fcra-account`, `bp:missing:indemnity`, `biz:<id>`); feedback, overrides and calibration key on it, so never change existing keys. Finding ids must also be stable across re-runs (feedback is stored per review + finding id).
+- `calibration.ts` applies votes per contract type in `runReview`; thresholds live in `THRESHOLDS`. Muted findings get `learning.effect = "muted"` and are excluded from the risk score and counts, never deleted.
+- Learned types use nearest neighbour (`NearestExamples`), not naive Bayes: NB scored 5/8 leave-one-out on our real contracts with ~100% stated confidence when wrong. Only follow a confirmed label above `CONTRACT_MATCH` / `CLAUSE_MATCH` similarity.
+- Only a person's explicit choice is a training example (type picker, folder upload, repository edit, clause picker). Carried-over guesses (e.g. filing a review into the repository) pass `learnType: false`.
+- Every behaviour change goes through `logLearning` so the Learning page can explain it.
+
 ## Design
 
 Follows The/Nudge design system ("Proof System"): brown `#693d30` text on warm paper `#f6f2ec`, Montserrat Light with Lato italic captions, hairline rules, small radii (2 to 6px), wide-tracked uppercase kickers, `/01` index markers. Status colours are the brand accents only: clay for issues, gold for checks, moss for passes, at badge or marker scale. Tokens live in `src/styles/` (copied from the design system zip) and the app styles in `src/app/globals.css`. Use the existing classes (`btn`, `badge`, `card`, `field`, `tabs`, `finding`, …) rather than new one-off styles. UK spelling, sentence case, "The/Nudge" with the slash, no emoji.
