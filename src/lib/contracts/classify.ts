@@ -50,12 +50,12 @@ export type ContractTypeGuess = { type: ContractType; confidence: number };
 const TITLE_PHRASES: Partial<Record<ContractType, string[]>> = {
   csr: ["corporate social responsibility grant agreement", "csr grant agreement", "csr agreement", "csr project agreement", "confirmation of project"],
   grant: ["grant agreement", "financial support agreement", "grant letter", "sanction letter", "letter of grant"],
-  partnership: ["collaboration agreement", "partnership agreement", "implementation partner agreement", "implementing partner agreement", "sub-grant agreement", "subgrant agreement", "designated partner", "implementing partner", "confirming party"],
+  partnership: ["collaboration agreement", "partnership agreement", "data sharing agreement", "implementation partner agreement", "implementing partner agreement", "sub-grant agreement", "subgrant agreement", "designated partner", "implementing partner", "confirming party"],
   mou: ["memorandum of understanding", "memorandum of agreement"],
-  service: ["service agreement", "services agreement", "vendor agreement", "purchase order", "statement of work"],
-  consultancy: ["consultancy agreement", "consulting agreement", "consultant agreement", "terms of engagement"],
+  service: ["service agreement", "services agreement", "vendor agreement", "purchase order", "statement of work", "software license agreement", "software licence agreement", "subscription agreement", "reseller agreement", "catering agreement", "product sales agreement"],
+  consultancy: ["consultancy agreement", "consulting agreement", "consultant agreement", "terms of engagement", "independent contractor agreement"],
   nda: ["non-disclosure agreement", "nondisclosure agreement", "confidentiality agreement", "mutual nda"],
-  employment: ["employment agreement", "appointment letter", "offer letter", "letter of appointment", "fellowship agreement"],
+  employment: ["employment agreement", "appointment letter", "offer letter", "letter of appointment", "fellowship agreement", "severance agreement"],
   donation: ["donation agreement", "gift deed", "deed of donation"],
   lease: ["lease deed", "lease agreement", "leave and licence agreement", "leave and license agreement", "rent agreement"],
 };

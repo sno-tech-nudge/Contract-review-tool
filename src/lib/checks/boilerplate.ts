@@ -5,6 +5,9 @@ import { cosine, TfIdf, tokenize, type Vector } from "../text/similarity";
 import { DocText, excerpt, unwrapLines } from "../text/locate";
 import type { ClauseMatch, Finding, ReviewResult } from "../review/types";
 import { MODEL_CLAUSES, MODEL_CLAUSE_SOURCE } from "./model-clauses";
+import type { LibraryEntry } from "../library";
+import { displayClauseText } from "../library/parse";
+import { pluralTypeName, splitTypes, usLawReference, validForPhrase } from "../library/interpret";
 
 export type RepoDocument = {
   id: string;
@@ -28,6 +31,29 @@ type RepoClause = {
 
 const ALIGNED = 0.55;
 const DIFFERENT = 0.25;
+// A contract clause counts as a given clause-library version from here up.
+// Measured on our contracts: clauses drafted from a library version 0.45+,
+// unrelated drafting at most 0.39.
+const LIBRARY_MATCH = 0.45;
+
+type LibraryClause = LibraryEntry & { types: ClauseType[]; validTypes: ContractType[]; us: boolean; vector: Vector };
+
+const librarySource = (l: LibraryEntry) => `Clause library: ${l.topic} (${l.label}${l.variant === "standard" ? ", standard" : ""})`;
+// written for this kind of contract (or for any), whatever its legal system
+const meantFor = (l: LibraryClause, contractType: string) => !l.validTypes.length || l.validTypes.includes(contractType as ContractType);
+// safe to offer as wording for this contract
+const fits = (l: LibraryClause, contractType: string) => !l.us && meantFor(l, contractType);
+
+// The library version to use for this kind of contract: one written for it,
+// else the standard version, else any version that is not limited elsewhere.
+function libraryChoice(entries: LibraryClause[], contractType: string): LibraryClause | undefined {
+  const usable = entries.filter((l) => fits(l, contractType));
+  return (
+    usable.find((l) => l.validTypes.includes(contractType as ContractType)) ??
+    usable.find((l) => l.variant === "standard") ??
+    usable[0]
+  );
+}
 
 const downgrade: Record<Severity, Severity> = { critical: "high", high: "medium", medium: "low", low: "low", info: "info" };
 
@@ -99,18 +125,27 @@ function presentInText(doc: DocText, type: ClauseType): boolean {
   return hits >= 2;
 }
 
-function pickSuggestion(type: ClauseType, repoClauses: RepoClause[], contractType: string, docScores: Map<string, number>) {
+function pickSuggestion(type: ClauseType, repoClauses: RepoClause[], library: LibraryClause[], contractType: string, docScores: Map<string, number>) {
   const candidates = repoClauses.filter((c) => c.types[0] === type);
-  if (candidates.length) {
-    candidates.sort((a, b) => {
-      const rank = (c: RepoClause) => (c.isTemplate ? 2 : 0) + (c.docType === contractType ? 1 : 0) + (docScores.get(c.docId) ?? 0);
-      return rank(b) - rank(a);
-    });
-    const best = candidates[0];
-    return { text: unwrapLines(best.text), source: best.docTitle + (best.isTemplate ? " (approved template)" : ""), documentId: best.docId };
-  }
+  candidates.sort((a, b) => {
+    const rank = (c: RepoClause) => (c.isTemplate ? 2 : 0) + (c.docType === contractType ? 1 : 0) + (docScores.get(c.docId) ?? 0);
+    return rank(b) - rank(a);
+  });
+  const fromRepo = (c: RepoClause) => ({ text: unwrapLines(c.text), source: c.docTitle + (c.isTemplate ? " (approved template)" : ""), documentId: c.docId });
+  const fromLibrary = (l: LibraryClause) => ({ text: displayClauseText(l.text), source: librarySource(l) });
+  // Only library topics that are the clause itself ("Effect of Termination"
+  // for termination), not one aspect of it ("Marking" for confidentiality).
+  const whole = library.filter((l) => l.types[0] === type && CLAUSE_TYPES[type].heading.some((h) => l.topic.toLowerCase().includes(h)));
+  const lib = libraryChoice(whole, contractType);
+  // An approved template wins, then a library version written for this kind
+  // of contract, then our own past drafting, the starter wording, and last
+  // the library's general version.
+  if (candidates[0]?.isTemplate) return fromRepo(candidates[0]);
+  if (lib?.validTypes.includes(contractType as ContractType)) return fromLibrary(lib);
+  if (candidates[0]) return fromRepo(candidates[0]);
   const model = MODEL_CLAUSES[type];
-  return model ? { text: model, source: MODEL_CLAUSE_SOURCE } : undefined;
+  if (model) return { text: model, source: MODEL_CLAUSE_SOURCE };
+  return lib ? fromLibrary(lib) : undefined;
 }
 
 export function runBoilerplateCheck(input: {
@@ -118,8 +153,9 @@ export function runBoilerplateCheck(input: {
   segments: Segment[];
   contractType: ContractType;
   repository: RepoDocument[];
+  library?: LibraryEntry[];
 }): Pick<ReviewResult, "clauses" | "comparedWith" | "coverage"> & { findings: Finding[] } {
-  const { doc, segments, contractType, repository } = input;
+  const { doc, segments, contractType, repository, library: libraryEntries = [] } = input;
   const findings: Finding[] = [];
   // Ids and rule keys describe what a finding is about, not its order, so
   // feedback stays attached to the right finding across re-runs and reviews.
@@ -131,7 +167,15 @@ export function runBoilerplateCheck(input: {
     d.clauses.map((c) => ({ d, c, tokens: tokenize(c.text) }))
   );
   const segTokens = segments.map((s) => tokenize(s.text));
-  const idf = new TfIdf([...tokenised.map((t) => t.tokens), ...segTokens]);
+  const libTokens = libraryEntries.map((l) => tokenize(`${l.title} ${l.text}`));
+  const idf = new TfIdf([...tokenised.map((t) => t.tokens), ...libTokens, ...segTokens]);
+  const library: LibraryClause[] = libraryEntries.map((l, i) => ({
+    ...l,
+    types: [l.clauseType as ClauseType],
+    validTypes: splitTypes(l.validFor),
+    us: l.jurisdiction === "us",
+    vector: idf.vector(libTokens[i]),
+  }));
   for (const { d, c, tokens } of tokenised) {
     const classified = classifyClause(c.heading, c.text);
     repoClauses.push({
@@ -192,11 +236,11 @@ export function runBoilerplateCheck(input: {
       detail:
         basis === "repository" && count
           ? `Found in ${count} of ${sameType.length} ${lowerLabel(contractTypeLabel(contractType))}s in the repository, but not in this contract.`
-          : `A standard ${lowerLabel(contractTypeLabel(contractType))} usually includes a ${lowerLabel(clauseTypeLabel(type))} clause.`,
+          : `A standard ${lowerLabel(contractTypeLabel(contractType))} usually includes ${/^[aeiou]/i.test(clauseTypeLabel(type)) ? "an" : "a"} ${lowerLabel(clauseTypeLabel(type))} clause.`,
       severity: CLAUSE_TYPES[type].importance,
       status: "issue",
       recommendation: "Add the clause, or confirm with the counterparty why it has been left out.",
-      suggestion: pickSuggestion(type, repoClauses, contractType, docScores),
+      suggestion: pickSuggestion(type, repoClauses, library, contractType, docScores),
     });
   }
 
@@ -213,18 +257,40 @@ export function runBoilerplateCheck(input: {
         best = c;
       }
     }
-    const similarity = best ? Math.min(1, Math.round(bestScore * 100) / 100) : null;
+    // The clause library version this clause was drafted from, if any.
+    let lib: LibraryClause | null = null;
+    let libScore = 0;
+    for (const l of library) {
+      if (s.type !== "other" ? !s.types.includes(l.types[0]) : l.types[0] !== "other") continue;
+      const score = cosine(vector, l.vector);
+      if (score > libScore) {
+        libScore = score;
+        lib = l;
+      }
+    }
+    if (libScore < LIBRARY_MATCH) lib = null;
+    // a close library version is a better reference than looser repository drafting
+    const libraryIsReference = !!lib && libScore > bestScore;
+    if (libraryIsReference) bestScore = libScore;
+
+    const similarity = best || libraryIsReference ? Math.min(1, Math.round(bestScore * 100) / 100) : null;
     const quote = excerpt(s.text, 200);
     const label = clauseTypeLabel(s.type);
     const importance = CLAUSE_TYPES[s.type].importance;
+    const reference = libraryIsReference && lib ? librarySource(lib) : best?.docTitle;
+    const referenceSuggestion = libraryIsReference && lib
+      ? { text: displayClauseText(lib.text), source: librarySource(lib) }
+      : best
+        ? { text: unwrapLines(best.text), source: best.docTitle + (best.isTemplate ? " (approved template)" : ""), documentId: best.docId }
+        : undefined;
 
-    if (best && similarity !== null && s.type !== "parties" && s.type !== "signatures") {
+    if (reference && similarity !== null && s.type !== "parties" && s.type !== "signatures") {
       const pct = Math.round(similarity * 100);
       if (similarity >= ALIGNED) {
         findings.push({
           id: `bp-wording-${s.position}`, ruleKey: `bp:wording:${s.type}`, check: "boilerplate", category: label, status: "pass", severity: "info",
           title: `${label} follows standard wording`,
-          detail: `${pct}% similar to "${best.docTitle}".`,
+          detail: `${pct}% similar to "${reference}".`,
           quote, page: s.page,
         });
       } else {
@@ -232,17 +298,49 @@ export function runBoilerplateCheck(input: {
           id: `bp-wording-${s.position}`, ruleKey: `bp:wording:${s.type}`, check: "boilerplate", category: label, status: "warning",
           severity: similarity >= DIFFERENT ? downgrade[importance] : importance === "info" ? "low" : downgrade[importance],
           title: similarity >= DIFFERENT ? `${label} differs from standard wording` : `${label} is drafted unlike anything in the repository`,
-          detail: `Closest repository match is "${best.docTitle}" at ${pct}% similarity. Compare the two before accepting this wording.`,
+          detail: `Closest standard wording is "${reference}" at ${pct}% similarity. Compare the two before accepting this wording.`,
           quote, page: s.page,
           recommendation: "Read this clause against the standard version and keep any departures deliberate.",
-          suggestion: { text: unwrapLines(best.text), source: best.docTitle + (best.isTemplate ? " (approved template)" : ""), documentId: best.docId },
+          suggestion: referenceSuggestion,
         });
       }
+    }
+
+    // ── Is this the right version for this kind of contract? ──
+    const usRef = usLawReference(s.text);
+    if (usRef) {
+      const alt = lib ? libraryChoice(library.filter((l) => l.topic === lib!.topic), contractType) : undefined;
+      findings.push({
+        id: `lib-us-law-${s.position}`, ruleKey: `lib:us-law:${s.type}`, check: "boilerplate", category: "Clause library", status: "warning", severity: "medium",
+        title: `${label} clause relies on US law`,
+        detail:
+          `It refers to "${usRef}", which only has meaning under US law` +
+          (lib ? `, like the clause library's "${lib.topic}" (${lib.label}) it closely follows` : "") +
+          `. In a contract under Indian law it may have no effect or the wrong one.`,
+        quote: excerpt(s.text, 200), page: s.page,
+        recommendation: "Replace it with an Indian-law equivalent, or delete it if it does not apply to this contract.",
+        suggestion: alt ? { text: displayClauseText(alt.text), source: librarySource(alt) } : undefined,
+      });
+    }
+    if (lib && !meantFor(lib, contractType)) {
+      const alt = libraryChoice(library.filter((l) => l.topic === lib!.topic && l.id !== lib!.id), contractType);
+      findings.push({
+        id: `lib-context-${s.position}`, ruleKey: `lib:context:${s.type}`, check: "boilerplate", category: "Clause library", status: "warning",
+        severity: importance === "high" ? "medium" : "low",
+        title: `${lib.topic}: version meant for ${validForPhrase(lib.validTypes)}`,
+        detail:
+          `This clause follows the clause library's "${lib.label}" version (${Math.round(libScore * 100)}% similar), which is meant for ${validForPhrase(lib.validTypes)}, not ${pluralTypeName(contractType)}.` +
+          (alt ? ` For this kind of contract the library uses "${alt.label}".` : " The library has no version for this kind of contract."),
+        quote: excerpt(s.text, 200), page: s.page,
+        recommendation: alt ? "Check the clause suits this contract, or switch to the library's version for it." : "Check the clause suits this contract before accepting it.",
+        suggestion: alt ? { text: displayClauseText(alt.text), source: librarySource(alt) } : undefined,
+      });
     }
 
     if (s.type === "other" && repoClauses.length > 0 && repository.length >= 3 && s.text.length > 200) {
       let top = 0;
       for (const c of repoClauses) top = Math.max(top, cosine(vector, c.vector));
+      for (const l of library) top = Math.max(top, cosine(vector, l.vector));
       if (top < 0.2) {
         findings.push({
           id: `bp-unfamiliar-${s.position}`, ruleKey: "bp:unfamiliar", check: "boilerplate", category: "Unfamiliar clause", status: "warning", severity: "low",
@@ -259,7 +357,10 @@ export function runBoilerplateCheck(input: {
       page: s.page,
       quote,
       similarity,
-      matchedDocument: best ? { id: best.docId, title: best.docTitle } : undefined,
+      matchedDocument: best && !libraryIsReference ? { id: best.docId, title: best.docTitle } : undefined,
+      library: lib
+        ? { topic: lib.topic, label: lib.label, variant: lib.variant, similarity: Math.round(libScore * 100) / 100, validFor: lib.validTypes, fits: meantFor(lib, contractType) && !usRef }
+        : undefined,
     };
   });
 

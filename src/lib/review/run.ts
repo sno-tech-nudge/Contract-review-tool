@@ -9,6 +9,7 @@ import { DocText } from "../text/locate";
 import { aiEnabled, aiModel } from "../ai/claude";
 import { guessContractType, learnContractType, learnedClauseType, loadLearnedModels } from "../learning";
 import { applyCalibration, loadCalibration } from "../learning/calibration";
+import { loadLibrary } from "../library";
 import { isMuted, riskScore, SEVERITY_ORDER, type Finding, type ReviewResult } from "./types";
 
 const STATUS_ORDER = { issue: 0, warning: 1, pass: 2 } as const;
@@ -39,7 +40,7 @@ export async function runReview(documentId: string, opts: { contractType?: Contr
   }
 
   await ensureStarterRules();
-  const [repository, disabled, businessRules, calibration] = await Promise.all([
+  const [repository, disabled, businessRules, calibration, library] = await Promise.all([
     prisma.document.findMany({
       where: { kind: "REPOSITORY" },
       select: { id: true, title: true, contractType: true, isTemplate: true, text: true, clauses: { select: { heading: true, text: true, clauseType: true } } },
@@ -47,10 +48,11 @@ export async function runReview(documentId: string, opts: { contractType?: Contr
     disabledLegalRules(),
     prisma.businessRule.findMany({ orderBy: { createdAt: "asc" } }),
     loadCalibration(),
+    loadLibrary(),
   ]);
 
   const segments = segment(doc, (h, t) => learnedClauseType(h, t, models));
-  const boilerplate = runBoilerplateCheck({ doc, segments, contractType, repository });
+  const boilerplate = runBoilerplateCheck({ doc, segments, contractType, repository, library });
   const legal = runLegalCheck(doc, contractType, disabled);
   const business = runBusinessCheck(doc, segments, contractType, businessRules);
   const keyTerms = extractKeyTerms(doc);
@@ -85,7 +87,7 @@ export async function runReview(documentId: string, opts: { contractType?: Contr
     clauses: boilerplate.clauses,
     comparedWith: boilerplate.comparedWith,
     coverage: boilerplate.coverage,
-    checksRun: { legalRules: legal.rulesRun, businessRules: business.rulesRun, repositoryDocs: repository.length },
+    checksRun: { legalRules: legal.rulesRun, businessRules: business.rulesRun, repositoryDocs: repository.length, libraryClauses: library.length },
     ai: previous?.ai.status === "done" ? previous.ai : aiEnabled() ? { status: "pending", model: aiModel() } : { status: "off" },
   };
 

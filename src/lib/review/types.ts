@@ -43,6 +43,8 @@ export type ClauseMatch = {
   quote: string;
   similarity: number | null; // best match in the repository, null when there was nothing to compare
   matchedDocument?: { id: string; title: string };
+  // the clause library version it most resembles, when the resemblance is close
+  library?: { topic: string; label: string; variant: string; similarity: number; validFor: string[]; fits: boolean };
 };
 
 export type ReviewResult = {
@@ -57,7 +59,7 @@ export type ReviewResult = {
   clauses: ClauseMatch[];
   comparedWith: { id: string; title: string; similarity: number; isTemplate: boolean }[];
   coverage: { expected: number; present: number; basis: "repository" | "baseline"; basisCount: number };
-  checksRun: { legalRules: number; businessRules: number; repositoryDocs: number };
+  checksRun: { legalRules: number; businessRules: number; repositoryDocs: number; libraryClauses?: number };
   ai: { status: "off" | "pending" | "done" | "failed"; model?: string; error?: string };
 };
 

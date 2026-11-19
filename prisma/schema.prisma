@@ -173,3 +173,26 @@ model LearningEvent {
 
   @@index([createdAt])
 }
+
+// Standard clauses imported from the team's clause library (PDF exports with a
+// standard version and alternatives per topic). Kept in the database, not the
+// code, so the team can add to it and correct how each version is read.
+model LibraryClause {
+  id           String   @id @default(cuid())
+  key          String   @unique // topic + label, so re-importing a file updates instead of duplicating
+  topic        String
+  clauseType   String
+  variant      String // standard | alternative
+  label        String // the version's name, which says where or when it applies
+  title        String   @default("")
+  text         String
+  validFor     String   @default("") // contract types it is meant for, ";"-joined; empty means any
+  jurisdiction String   @default("") // "us" when it rests on US law
+  source       String   @default("") // file it was imported from
+  position     Int      @default(0)
+  edited       Boolean  @default(false) // a person changed its type or contract types; imports keep their choice
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([clauseType])
+}

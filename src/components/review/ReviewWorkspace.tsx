@@ -560,7 +560,7 @@ export function ReviewWorkspace({ review, result, document: doc, aiAvailable, la
               <div className="block" style={{ marginTop: "var(--space-6)" }}>
                 <div className="block__head">
                   <span className="kicker">Clause map</span>
-                  <span className="caption">Similarity to the closest repository clause</span>
+                  <span className="caption">Similarity to the closest repository or library clause</span>
                 </div>
                 <ul className="clausemap">
                   {result.clauses.map((c, i) => (
@@ -574,6 +574,14 @@ export function ReviewWorkspace({ review, result, document: doc, aiAvailable, la
                           <span className="cm-type">
                             {clauseTypeLabel(c.clauseType)} · p.{c.page}
                           </span>
+                          {c.library && (
+                            <span
+                              className={`cm-lib${c.library.fits ? "" : " cm-lib--off"}`}
+                              title={`Closest clause library version: ${c.library.topic}, "${c.library.label}" (${Math.round(c.library.similarity * 100)}% similar)`}
+                            >
+                              {c.library.fits ? "Library" : "Check"}: {c.library.label}
+                            </span>
+                          )}
                         </span>
                         <span className="simbar">
                           {c.similarity === null ? (

@@ -5,15 +5,24 @@
 
 // Exact names first; then the same names with a prefix, which Vercel's Storage
 // dialog allows (e.g. STORAGE_DATABASE_URL).
-const first = (env, names) => {
-  for (const n of names) if (env[n]) return { value: env[n], name: n };
+const candidates = (env, names) => {
+  const out = [];
+  for (const n of names) if (env[n]) out.push({ value: env[n], name: n });
   for (const n of names) {
-    const prefixed = Object.keys(env)
-      .filter((k) => k.endsWith(`_${n}`) && env[k])
-      .sort();
-    if (prefixed.length) return { value: env[prefixed[0]], name: prefixed[0] };
+    for (const k of Object.keys(env).filter((k) => k.endsWith(`_${n}`) && env[k]).sort()) {
+      if (!out.some((c) => c.name === k)) out.push({ value: env[k], name: k });
+    }
   }
-  return null;
+  return out;
+};
+
+const isSupabase = (url) => /\.supabase\.(com|co)$/.test(hostOf(url).replace(/:\d+$/, ""));
+
+// Supabase is the app's database. While an older Neon database is still
+// connected to the project (kept as a backup), Supabase wins.
+const first = (env, names) => {
+  const all = candidates(env, names);
+  return all.find((c) => isSupabase(c.value)) ?? all[0] ?? null;
 };
 
 // Names only, never values: lets the build log show what is actually set.
@@ -54,7 +63,9 @@ export function hostOf(url) {
 
 export function resolveDatabaseEnv(env) {
   const pooled = first(env, ["DATABASE_URL", "POSTGRES_PRISMA_URL", "POSTGRES_URL"]);
-  const direct = first(env, ["DIRECT_URL", "DATABASE_URL_UNPOOLED", "POSTGRES_URL_NON_POOLING"]);
+  // the direct URL must point at the same database as the pooled one
+  const sameDb = (c) => !pooled || isSupabase(c.value) === isSupabase(pooled.value);
+  const direct = candidates(env, ["DIRECT_URL", "DATABASE_URL_UNPOOLED", "POSTGRES_URL_NON_POOLING"]).find(sameDb) ?? null;
   const directValue = direct?.value ?? pooled?.value;
   const directUrl = directFromPooled(directValue);
   return {
