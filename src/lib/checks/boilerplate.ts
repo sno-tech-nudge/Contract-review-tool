@@ -116,10 +116,15 @@ function presentInText(doc: DocText, type: ClauseType): boolean {
   // after a sub-clause number ("18.2 Amendment: any amendment…")
   for (const h of def.heading) {
     const word = h.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const ownLine = new RegExp(`(^|\\n)\\s*(?:\\d{1,2}(?:\\.\\d{1,2})*\\.?\\s*)?${word}[a-z]*\\b[^\\n]{0,40}(\\n|[.:])`, "i");
+    // headings start with a capital: "transfer to the bank account" is a wrapped sentence
+    const ownLine = new RegExp(`(^|\\n)\\s*(?:\\d{1,2}(?:\\.\\d{1,2})*\\.?\\s*)?(${word}[a-z]*)\\b[^\\n]{0,40}(\\n|[.:])`, "gi");
     const inline = new RegExp(`\\b\\d{1,2}\\.\\d{1,2}\\.?\\s+${word}[a-z]*\\s*[:.\\-–]`, "i");
-    if (ownLine.test(doc.full) || inline.test(doc.flat)) return true;
+    for (const m of doc.full.matchAll(ownLine)) if (/^[A-Z]/.test(m[2])) return true;
+    if (inline.test(doc.flat)) return true;
   }
+  // one decisive phrase anywhere ("entire agreement", "unspent") is enough
+  const flat = doc.flat.toLowerCase();
+  if (((def as { strong?: readonly string[] }).strong ?? []).some((p) => flat.includes(p))) return true;
   let hits = 0;
   for (const b of def.body) if (doc.lower.includes(b)) hits++;
   return hits >= 2;
@@ -353,6 +358,7 @@ export function runBoilerplateCheck(input: {
 
     return {
       heading: s.heading,
+      section: s.section,
       clauseType: s.type,
       page: s.page,
       quote,

@@ -565,6 +565,7 @@ export function ReviewWorkspace({ review, result, document: doc, aiAvailable, la
                 <ul className="clausemap">
                   {result.clauses.map((c, i) => (
                     <li key={i}>
+                      {c.section && c.section !== result.clauses[i - 1]?.section && <span className="cm-section">{c.section}</span>}
                       <button onClick={() => locate({ quote: c.quote, page: c.page })} title="Show in contract">
                         <span className="cm-idx">{i + 1}</span>
                         <span style={{ minWidth: 0 }}>

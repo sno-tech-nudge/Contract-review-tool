@@ -38,6 +38,7 @@ export type KeyTerm = { label: string; value: string; quote?: string; page?: num
 
 export type ClauseMatch = {
   heading: string;
+  section?: string; // the article or part it sits in
   clauseType: string;
   page: number;
   quote: string;

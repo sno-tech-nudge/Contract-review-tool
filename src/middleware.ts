@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { authEnabled, SESSION_COOKIE, sessionToken } from "@/lib/auth";
+import { authEnabled, SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
 
-const PUBLIC_PATHS = ["/login", "/api/auth/login"];
+const PUBLIC_PATHS = ["/login", "/api/auth/login", "/setup", "/api/auth/setup"];
 
 const NOT_CONFIGURED = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Sign-in not set up · Contract review</title>
@@ -21,10 +21,14 @@ export async function middleware(request: NextRequest) {
   }
 
   const { pathname, search } = request.nextUrl;
-  if (PUBLIC_PATHS.includes(pathname)) return NextResponse.next();
+  // pages read the path to decide whether they need an account
+  const headers = new Headers(request.headers);
+  headers.set("x-pathname", pathname);
+  if (PUBLIC_PATHS.includes(pathname)) return NextResponse.next({ request: { headers } });
 
-  const cookie = request.cookies.get(SESSION_COOKIE)?.value;
-  if (cookie && cookie === (await sessionToken())) return NextResponse.next();
+  // the signature is checked here; whether the account is still active is
+  // checked on the server, which can reach the database
+  if (await verifySessionToken(request.cookies.get(SESSION_COOKIE)?.value)) return NextResponse.next({ request: { headers } });
 
   if (pathname.startsWith("/api/")) return NextResponse.json({ error: "Sign in to continue." }, { status: 401 });
   const login = new URL("/login", request.url);

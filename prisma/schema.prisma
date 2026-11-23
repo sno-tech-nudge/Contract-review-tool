@@ -57,7 +57,9 @@ model Clause {
 model Review {
   id           String   @id @default(cuid())
   documentId   String
-  status       String   @default("COMPLETE") // COMPLETE | FAILED
+  status       String   @default("COMPLETE") // PROCESSING | COMPLETE | FAILED
+  stage        String   @default("") // what a review in progress is doing now
+  error        String   @default("") // why it failed, in words for the reviewer
   contractType String
   riskScore    Int      @default(0) // 0 (clean) to 100 (high risk)
   resultJson   String   @default("{}") // ReviewResult, see src/lib/review/types.ts
@@ -113,6 +115,9 @@ model FindingFeedback {
   contractType String
   verdict      String // useful | not_relevant
   reason       String   @default("")
+  userId       String? // who voted; null for votes from before sign-in by person
+  userName     String   @default("")
+  weight       Int      @default(1) // a legal reviewer's vote counts double
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -132,6 +137,8 @@ model MissedIssue {
   severity     String   @default("medium")
   page         Int?
   status       String   @default("open") // open | rule_created | dismissed
+  userId       String?
+  userName     String   @default("")
   createdAt    DateTime @default(now())
 
   review Review? @relation(fields: [reviewId], references: [id], onDelete: SetNull)
@@ -169,6 +176,7 @@ model LearningEvent {
   id        String   @id @default(cuid())
   kind      String
   summary   String
+  userName  String   @default("") // who caused it, when a person did
   createdAt DateTime @default(now())
 
   @@index([createdAt])
@@ -195,4 +203,19 @@ model LibraryClause {
   updatedAt    DateTime @updatedAt
 
   @@index([clauseType])
+}
+
+// People who sign in. Passwords are scrypt hashes; a new person sets theirs
+// through a one-time setup link an admin shares, so no one else ever knows it.
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String
+  role         String    @default("member") // admin | legal | member
+  passwordHash String    @default("")
+  setupHash    String    @default("") // sha256 of the one-time setup link token
+  setupExpires DateTime?
+  active       Boolean   @default(true)
+  lastSeenAt   DateTime?
+  createdAt    DateTime  @default(now())
 }

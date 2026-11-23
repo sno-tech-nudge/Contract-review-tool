@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { LEGAL_RULES } from "@/lib/checks/legal/rules";
 import { decide, loadCalibration, precision } from "@/lib/learning/calibration";
 import { suggestPhrase } from "@/lib/learning/suggest";
+import { measureAccuracy } from "@/lib/learning/accuracy";
 import type { ReviewResult } from "@/lib/review/types";
 import { LearningDashboard, type RuleRow, type SuggestionRow } from "@/components/learning/LearningDashboard";
 
@@ -9,7 +10,7 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Learning · Contract review" };
 
 export default async function LearningPage() {
-  const [calibration, feedbackRows, overrides, missed, examples, events, recent, repoDocs] = await Promise.all([
+  const [calibration, feedbackRows, overrides, missed, examples, events, recent, repoDocs, accuracy] = await Promise.all([
     loadCalibration(),
     prisma.findingFeedback.findMany({ select: { ruleKey: true, check: true, title: true, contractType: true, verdict: true }, orderBy: { updatedAt: "desc" } }),
     prisma.ruleOverride.findMany(),
@@ -18,6 +19,7 @@ export default async function LearningPage() {
     prisma.learningEvent.findMany({ orderBy: { createdAt: "desc" }, take: 40 }),
     prisma.review.findMany({ orderBy: { createdAt: "desc" }, take: 50, select: { contractType: true, resultJson: true } }),
     prisma.document.findMany({ where: { kind: "REPOSITORY" }, select: { text: true } }),
+    measureAccuracy(),
   ]);
 
   // One row per check and contract type that has votes or a manual setting.
@@ -82,8 +84,9 @@ export default async function LearningPage() {
       }}
       typeExamples={examples.filter((e) => e.kind === "contract_type").map((e) => ({ label: e.label, count: e._count._all }))}
       rules={rules}
+      accuracy={accuracy}
       suggestions={suggestions}
-      events={events.map((e) => ({ id: e.id, kind: e.kind, summary: e.summary, createdAt: e.createdAt.toISOString() }))}
+      events={events.map((e) => ({ id: e.id, kind: e.kind, summary: e.summary, createdAt: e.createdAt.toISOString(), userName: e.userName }))}
     />
   );
 }

@@ -2,6 +2,7 @@ import { prisma } from "../db";
 import { detectContractType } from "../contracts/classify";
 import { clauseTypeLabel, contractTypeLabel, type ClauseType, type ContractType, lowerLabel } from "../contracts/types";
 import { NearestExamples } from "./classifier";
+import { actingUser } from "../users";
 
 // What the tool has learned from people: matchers built from confirmed
 // contract and clause types, and a log of every change in behaviour.
@@ -52,8 +53,10 @@ export function learnedClauseType(heading: string, text: string, models: Learned
   return match && match.similarity >= CLAUSE_MATCH ? (match.label as ClauseType) : null;
 }
 
+// Records who caused it when a person did, so the log can say so.
 export async function logLearning(kind: string, summary: string) {
-  await prisma.learningEvent.create({ data: { kind, summary } });
+  const by = await actingUser();
+  await prisma.learningEvent.create({ data: { kind, summary, userName: by?.kind === "person" ? by.name : "" } });
 }
 
 // A person confirmed or corrected a contract's type.

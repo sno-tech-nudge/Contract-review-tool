@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { jsonError } from "@/lib/api";
 import { logLearning } from "@/lib/learning";
 import { contractTypeLabel, lowerLabel } from "@/lib/contracts/types";
+import { currentUser } from "@/lib/users";
 
 const SEVERITIES = ["critical", "high", "medium", "low"];
 
@@ -15,8 +16,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const quote = (body.quote ?? "").replace(/\s+/g, " ").trim().slice(0, 2000);
   const note = (body.note ?? "").trim().slice(0, 1000);
   if (!note) return jsonError("Describe what was missed.");
+  const me = await currentUser();
   const missed = await prisma.missedIssue.create({
     data: {
+      ...(me?.kind === "person" ? { userId: me.id, userName: me.name } : {}),
       reviewId: id,
       contractType: review.contractType,
       quote,

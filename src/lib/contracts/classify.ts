@@ -8,7 +8,10 @@ function count(text: string, phrase: string, cap = 5): number {
   if (!re) {
     // word boundaries only where the phrase starts/ends with a word character
     const pre = /^\w/.test(phrase) ? "\\b" : "";
-    const post = /\w$/.test(phrase) ? "(?:\\w{0,4})\\b" : "";
+    // stems take any ending ("indemn" → "indemnifies", "severab" → "severability");
+    // short words only a few letters, so "term" does not match "termination"
+    const lastWord = /(\w+)$/.exec(phrase)?.[1] ?? "";
+    const post = /\w$/.test(phrase) ? (lastWord.length >= 5 ? "(?:\\w{0,12})\\b" : "(?:\\w{0,4})\\b") : "";
     re = new RegExp(pre + escape(phrase) + post, "gi");
     cache.set(phrase, re);
   }
@@ -31,8 +34,10 @@ export function classifyClause(heading: string, text: string, isPreamble = false
     for (const k of def.heading) headingHits += count(h, k, 1);
     let bodyHits = 0;
     for (const k of def.body) bodyHits += count(body, k, 3);
-    const score = headingHits * 5 + bodyHits;
-    if (score > 0) scored.push({ type: key, score, headingHit: headingHits > 0 });
+    let strongHits = 0;
+    for (const k of (def as { strong?: readonly string[] }).strong ?? []) strongHits += count(body, k, 1);
+    const score = headingHits * 5 + bodyHits + Math.min(2, strongHits) * 3;
+    if (score > 0) scored.push({ type: key, score, headingHit: headingHits > 0 || strongHits > 0 });
   }
   if (isPreamble && /between|hereinafter|whereas/i.test(body)) scored.push({ type: "parties", score: 50, headingHit: true });
   scored.sort((a, b) => b.score - a.score);

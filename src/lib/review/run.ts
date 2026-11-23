@@ -14,6 +14,17 @@ import { isMuted, riskScore, SEVERITY_ORDER, type Finding, type ReviewResult } f
 
 const STATUS_ORDER = { issue: 0, warning: 1, pass: 2 } as const;
 
+// What a review in progress shows, in order.
+export const REVIEW_STAGES = [
+  "Reading the contract",
+  "Splitting it into clauses",
+  "Comparing wording with the repository and clause library",
+  "Checking the law",
+  "Checking business rules",
+  "Scoring the risk",
+] as const;
+export type ReviewStage = (typeof REVIEW_STAGES)[number];
+
 export function sortFindings(findings: Finding[]): Finding[] {
   return [...findings].sort(
     (a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || SEVERITY_ORDER.indexOf(a.severity) - SEVERITY_ORDER.indexOf(b.severity)
@@ -21,7 +32,9 @@ export function sortFindings(findings: Finding[]): Finding[] {
 }
 
 // Runs all three checks on a stored document and saves (or refreshes) its review.
-export async function runReview(documentId: string, opts: { contractType?: ContractType; reviewId?: string } = {}) {
+export async function runReview(documentId: string, opts: { contractType?: ContractType; reviewId?: string; onStage?: (stage: ReviewStage) => Promise<unknown> } = {}) {
+  const stage = (s: ReviewStage) => opts.onStage?.(s);
+  await stage("Reading the contract");
   const document = await prisma.document.findUniqueOrThrow({ where: { id: documentId } });
   const doc = new DocText(JSON.parse(document.pagesJson) as string[]);
   const models = await loadLearnedModels();
@@ -51,10 +64,15 @@ export async function runReview(documentId: string, opts: { contractType?: Contr
     loadLibrary(),
   ]);
 
+  await stage("Splitting it into clauses");
   const segments = segment(doc, (h, t) => learnedClauseType(h, t, models));
+  await stage("Comparing wording with the repository and clause library");
   const boilerplate = runBoilerplateCheck({ doc, segments, contractType, repository, library });
+  await stage("Checking the law");
   const legal = runLegalCheck(doc, contractType, disabled);
+  await stage("Checking business rules");
   const business = runBusinessCheck(doc, segments, contractType, businessRules);
+  await stage("Scoring the risk");
   const keyTerms = extractKeyTerms(doc);
 
   // Past feedback mutes, lowers or raises checks for this contract type.
@@ -65,7 +83,8 @@ export async function runReview(documentId: string, opts: { contractType?: Contr
   let previous: ReviewResult | null = null;
   if (opts.reviewId) {
     const existing = await prisma.review.findUnique({ where: { id: opts.reviewId } });
-    if (existing) {
+    // a review still being created has no earlier results to keep
+    if (existing && existing.status === "COMPLETE") {
       previous = JSON.parse(existing.resultJson) as ReviewResult;
       previousAi = applyCalibration(
         previous.findings.filter((f) => f.check === "ai").map(({ learning, ...f }) => ({ ...f, severity: learning?.originalSeverity ?? f.severity })),
@@ -91,7 +110,7 @@ export async function runReview(documentId: string, opts: { contractType?: Contr
     ai: previous?.ai.status === "done" ? previous.ai : aiEnabled() ? { status: "pending", model: aiModel() } : { status: "off" },
   };
 
-  const data = { contractType, riskScore: riskScore(result.findings), resultJson: JSON.stringify(result), status: "COMPLETE" };
+  const data = { contractType, riskScore: riskScore(result.findings), resultJson: JSON.stringify(result), status: "COMPLETE", stage: "", error: "" };
   if (opts.reviewId) return prisma.review.update({ where: { id: opts.reviewId }, data });
   return prisma.review.create({ data: { ...data, documentId } });
 }

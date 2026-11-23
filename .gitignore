@@ -17,3 +17,7 @@ npm-debug.log*
 .vercel
 .env*
 !.env.example
+
+# accuracy test set: real contracts, never committed
+/eval/gold/
+/eval/results/

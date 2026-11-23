@@ -106,9 +106,13 @@ export default async function Home() {
                     </td>
                     <td className="muted">{contractTypeLabel(r.contractType)}</td>
                     <td>
-                      <RiskPill score={r.riskScore} />
+                      {r.status === "COMPLETE" ? (
+                        <RiskPill score={r.riskScore} />
+                      ) : (
+                        <span className={`badge ${r.status === "FAILED" ? "badge--clay" : "badge--neutral"}`}>{r.status === "FAILED" ? "Failed" : "In progress"}</span>
+                      )}
                     </td>
-                    <td className="num">{issues}</td>
+                    <td className="num">{r.status === "COMPLETE" ? issues : "–"}</td>
                     <td className="muted num">{formatDate(r.createdAt)}</td>
                   </tr>
                 );

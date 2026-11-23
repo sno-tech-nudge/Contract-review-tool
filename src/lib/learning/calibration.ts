@@ -32,7 +32,8 @@ export const THRESHOLDS = {
 
 export async function loadCalibration(): Promise<Calibration> {
   const [groups, overrides] = await Promise.all([
-    prisma.findingFeedback.groupBy({ by: ["ruleKey", "contractType", "verdict"], _count: { _all: true } }),
+    // each vote counts its weight: a legal reviewer's counts double
+    prisma.findingFeedback.groupBy({ by: ["ruleKey", "contractType", "verdict"], _sum: { weight: true } }),
     prisma.ruleOverride.findMany(),
   ]);
   const votes = new Map<string, Votes>();
@@ -43,8 +44,9 @@ export async function loadCalibration(): Promise<Calibration> {
     votes.set(k, v);
   };
   for (const g of groups) {
-    add(key(g.ruleKey, g.contractType), g.verdict, g._count._all);
-    add(key(g.ruleKey, ALL), g.verdict, g._count._all);
+    const n = g._sum.weight ?? 0;
+    add(key(g.ruleKey, g.contractType), g.verdict, n);
+    add(key(g.ruleKey, ALL), g.verdict, n);
   }
   return { votes, overrides: new Map(overrides.map((o) => [key(o.ruleKey, o.contractType), o.mode as "on" | "off"])) };
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import type { Accuracy } from "@/lib/learning/accuracy";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -54,7 +55,36 @@ const EFFECT: Record<string, { label: string; cls: string }> = {
 };
 const typeName = (t: string) => (t === "*" ? "All types" : contractTypeLabel(t));
 
-export function LearningDashboard({ stats, typeExamples, rules, suggestions, events }: { stats: Stats; typeExamples: { label: string; count: number }[]; rules: RuleRow[]; suggestions: SuggestionRow[]; events: { id: string; kind: string; summary: string; createdAt: string }[] }) {
+function AccuracyCard({ title, value, detail }: { title: string; value: string; detail: React.ReactNode }) {
+  return (
+    <div className="acc-card">
+      <span className="kicker">{title}</span>
+      <div className="acc-card__value num">{value}</div>
+      <p className="caption" style={{ margin: 0 }}>
+        {detail}
+      </p>
+    </div>
+  );
+}
+
+const asPct = (n: number) => `${Math.round(n * 100)}%`;
+
+export function LearningDashboard({
+  stats,
+  typeExamples,
+  rules,
+  accuracy,
+  suggestions,
+  events,
+}: {
+  stats: Stats;
+  typeExamples: { label: string; count: number }[];
+  rules: RuleRow[];
+  accuracy: Accuracy;
+  suggestions: SuggestionRow[];
+  events: { id: string; kind: string; summary: string; createdAt: string; userName?: string }[];
+}) {
+  const voted = accuracy.checks.reduce((n, c) => n + c.useful + c.notRelevant, 0);
   const router = useRouter();
   const toast = useToast();
   const [busy, setBusy] = useState<string | null>(null);
@@ -115,6 +145,54 @@ export function LearningDashboard({ stats, typeExamples, rules, suggestions, eve
           {typeExamples.length > 0 && <> · learning from {typeExamples.map((t) => `${t.count} ${lowerLabel(contractTypeLabel(t.label))}${t.count === 1 ? "" : "s"}`).join(", ")}</>}.
         </p>
       )}
+
+      <section style={{ marginBottom: "var(--space-8)" }}>
+        <div className="sechead">
+          <h2>How accurate it is</h2>
+          <span className="micro">measured on your team&apos;s own labels</span>
+        </div>
+        <div className="acc-grid">
+          <AccuracyCard
+            title="Contract type"
+            value={accuracy.contractType ? asPct(accuracy.contractType.learned) : "–"}
+            detail={
+              accuracy.contractType
+                ? `Right on ${Math.round(accuracy.contractType.learned * accuracy.contractType.tested)} of ${accuracy.contractType.tested} contracts people confirmed, each tested against all the others. Rules alone: ${asPct(accuracy.contractType.rulesOnly)}.`
+                : "Measured once people have confirmed the type of at least two contracts."
+            }
+          />
+          <AccuracyCard
+            title="Clause type"
+            value={accuracy.clauseType ? asPct(accuracy.clauseType.learned) : "–"}
+            detail={
+              accuracy.clauseType
+                ? `Right on ${Math.round(accuracy.clauseType.learned * accuracy.clauseType.tested)} of ${accuracy.clauseType.tested} clauses people corrected. Keyword rules alone: ${asPct(accuracy.clauseType.rulesOnly)}.`
+                : "Measured once people have corrected at least two clause types."
+            }
+          />
+          <AccuracyCard
+            title="Findings marked useful"
+            value={voted ? asPct(accuracy.checks.reduce((n, c) => n + c.useful, 0) / voted) : "–"}
+            detail={
+              voted ? (
+                <>
+                  {accuracy.checks.map((c, i) => (
+                    <span key={c.check}>
+                      {i > 0 && " · "}
+                      {CHECK_LABEL[c.check] ?? c.check} {asPct(c.precision)} of {c.useful + c.notRelevant}
+                    </span>
+                  ))}
+                </>
+              ) : (
+                "Measured from the useful and not relevant votes on findings."
+              )
+            }
+          />
+        </div>
+        <p className="caption" style={{ marginTop: "var(--space-3)" }}>
+          Clause splitting, key terms and missing-clause findings are scored separately against a hand-checked set of real contracts kept off the server (npm run eval).
+        </p>
+      </section>
 
       <section style={{ marginBottom: "var(--space-8)" }}>
         <div className="sechead">
@@ -229,7 +307,10 @@ export function LearningDashboard({ stats, typeExamples, rules, suggestions, eve
             {events.map((e) => (
               <li key={e.id}>
                 <span className="micro num">{formatDate(e.createdAt)}</span>
-                <span>{e.summary}</span>
+                <span>
+                  {e.summary}
+                  {e.userName && <span className="faint"> · {e.userName}</span>}
+                </span>
               </li>
             ))}
           </ol>
