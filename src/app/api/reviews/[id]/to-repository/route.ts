@@ -19,6 +19,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       kind: "REPOSITORY",
       title: d.title,
       contractType: review.contractType as ContractType,
+      entity: d.entity,
       learnType: false,
       counterparty: d.counterparty,
       isTemplate: Boolean(body.isTemplate),

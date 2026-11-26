@@ -10,6 +10,7 @@ import { aiEnabled, aiModel } from "../ai/claude";
 import { guessContractType, learnContractType, learnedClauseType, loadLearnedModels } from "../learning";
 import { applyCalibration, loadCalibration } from "../learning/calibration";
 import { loadLibrary } from "../library";
+import { loadCustomClauses, runCustomClauseCheck } from "../library/custom";
 import { isMuted, riskScore, SEVERITY_ORDER, type Finding, type ReviewResult } from "./types";
 
 const STATUS_ORDER = { issue: 0, warning: 1, pass: 2 } as const;
@@ -53,21 +54,26 @@ export async function runReview(documentId: string, opts: { contractType?: Contr
   }
 
   await ensureStarterRules();
-  const [repository, disabled, businessRules, calibration, library] = await Promise.all([
+  const [repository, disabled, businessRules, calibration, library, customClauses] = await Promise.all([
     prisma.document.findMany({
       where: { kind: "REPOSITORY" },
-      select: { id: true, title: true, contractType: true, isTemplate: true, text: true, clauses: { select: { heading: true, text: true, clauseType: true } } },
+      select: { id: true, title: true, contractType: true, entity: true, isTemplate: true, text: true, clauses: { select: { heading: true, text: true, clauseType: true } } },
     }),
     disabledLegalRules(),
     prisma.businessRule.findMany({ orderBy: { createdAt: "asc" } }),
     loadCalibration(),
     loadLibrary(),
+    loadCustomClauses(),
   ]);
 
   await stage("Splitting it into clauses");
   const segments = segment(doc, (h, t) => learnedClauseType(h, t, models));
   await stage("Comparing wording with the repository and clause library");
-  const boilerplate = runBoilerplateCheck({ doc, segments, contractType, repository, library });
+  const boilerplate = runBoilerplateCheck({ doc, segments, contractType, repository, library, entity: document.entity });
+  // clauses the team added to the clause library for this kind of contract
+  const custom = runCustomClauseCheck({ doc, segments, contractType, entity: document.entity, clauses: customClauses });
+  boilerplate.findings.push(...custom.findings);
+  boilerplate.coverage = { ...boilerplate.coverage, expected: boilerplate.coverage.expected + custom.expected, present: boilerplate.coverage.present + Math.min(custom.present, custom.expected) };
   await stage("Checking the law");
   const legal = runLegalCheck(doc, contractType, disabled);
   await stage("Checking business rules");
@@ -96,6 +102,7 @@ export async function runReview(documentId: string, opts: { contractType?: Contr
 
   const result: ReviewResult = {
     contractType,
+    entity: document.entity,
     detectedType: detected.type,
     detectedConfidence: detected.confidence,
     detectedLearned: detected.learned,

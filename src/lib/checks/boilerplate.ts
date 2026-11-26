@@ -13,6 +13,7 @@ export type RepoDocument = {
   id: string;
   title: string;
   contractType: string;
+  entity?: string;
   isTemplate: boolean;
   text: string;
   clauses: { heading: string; text: string; clauseType: string }[];
@@ -20,6 +21,7 @@ export type RepoDocument = {
 
 type RepoClause = {
   docId: string;
+  docEntity: string;
   docTitle: string;
   isTemplate: boolean;
   docType: string;
@@ -130,10 +132,11 @@ function presentInText(doc: DocText, type: ClauseType): boolean {
   return hits >= 2;
 }
 
-function pickSuggestion(type: ClauseType, repoClauses: RepoClause[], library: LibraryClause[], contractType: string, docScores: Map<string, number>) {
+function pickSuggestion(type: ClauseType, repoClauses: RepoClause[], library: LibraryClause[], contractType: string, entity: string, docScores: Map<string, number>) {
   const candidates = repoClauses.filter((c) => c.types[0] === type);
   candidates.sort((a, b) => {
-    const rank = (c: RepoClause) => (c.isTemplate ? 2 : 0) + (c.docType === contractType ? 1 : 0) + (docScores.get(c.docId) ?? 0);
+    // our own entity's contracts first: the*delta wording for a the*delta contract
+    const rank = (c: RepoClause) => (c.isTemplate ? 2 : 0) + (c.docType === contractType ? 1 : 0) + (entity && c.docEntity === entity ? 1 : 0) + (docScores.get(c.docId) ?? 0);
     return rank(b) - rank(a);
   });
   const fromRepo = (c: RepoClause) => ({ text: unwrapLines(c.text), source: c.docTitle + (c.isTemplate ? " (approved template)" : ""), documentId: c.docId });
@@ -159,8 +162,9 @@ export function runBoilerplateCheck(input: {
   contractType: ContractType;
   repository: RepoDocument[];
   library?: LibraryEntry[];
+  entity?: string;
 }): Pick<ReviewResult, "clauses" | "comparedWith" | "coverage"> & { findings: Finding[] } {
-  const { doc, segments, contractType, repository, library: libraryEntries = [] } = input;
+  const { doc, segments, contractType, repository, library: libraryEntries = [], entity = "" } = input;
   const findings: Finding[] = [];
   // Ids and rule keys describe what a finding is about, not its order, so
   // feedback stays attached to the right finding across re-runs and reviews.
@@ -185,6 +189,7 @@ export function runBoilerplateCheck(input: {
     const classified = classifyClause(c.heading, c.text);
     repoClauses.push({
       docId: d.id,
+      docEntity: d.entity ?? "",
       docTitle: d.title,
       isTemplate: d.isTemplate,
       docType: d.contractType,
@@ -245,7 +250,7 @@ export function runBoilerplateCheck(input: {
       severity: CLAUSE_TYPES[type].importance,
       status: "issue",
       recommendation: "Add the clause, or confirm with the counterparty why it has been left out.",
-      suggestion: pickSuggestion(type, repoClauses, library, contractType, docScores),
+      suggestion: pickSuggestion(type, repoClauses, library, contractType, entity, docScores),
     });
   }
 

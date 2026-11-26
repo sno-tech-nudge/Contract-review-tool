@@ -16,7 +16,7 @@ export async function POST(request: Request) {
     const upload = await readContractUpload(request);
     const requested = (upload.fields.contractType ?? "") as ContractType;
     const contractType = CONTRACT_TYPE_KEYS.includes(requested) ? requested : undefined;
-    const doc = await ingestFile(upload.buffer, upload.name, { kind: "REVIEW", contractType, storageKey: upload.storageKey, ocrPages: upload.ocrPages });
+    const doc = await ingestFile(upload.buffer, upload.name, { kind: "REVIEW", contractType, entity: upload.fields.entity, storageKey: upload.storageKey, ocrPages: upload.ocrPages });
     const review = await prisma.review.create({
       data: { documentId: doc.id, contractType: doc.contractType || "other", status: "PROCESSING", stage: "Reading the contract" },
     });

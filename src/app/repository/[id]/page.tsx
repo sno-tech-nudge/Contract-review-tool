@@ -26,6 +26,7 @@ export default async function RepositoryDocumentPage({ params }: { params: Promi
         fileName: doc.fileName,
         mimeType: doc.mimeType,
         contractType: doc.contractType,
+        entity: doc.entity,
         counterparty: doc.counterparty,
         tags: doc.tags.split(";").filter(Boolean).join(", "),
         isTemplate: doc.isTemplate,

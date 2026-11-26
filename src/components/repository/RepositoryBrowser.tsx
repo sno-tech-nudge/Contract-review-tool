@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BadgeCheck, CircleAlert, CircleCheck, Folder, FolderOpen, LayoutGrid, List, Search, Star, Upload, X } from "lucide-react";
 import { CONTRACT_TYPES, CONTRACT_TYPE_KEYS, contractTypeLabel } from "@/lib/contracts/types";
+import { ENTITIES, ENTITY_KEYS, entityLabel } from "@/lib/contracts/entities";
 import { extOf, formatDate, formatSize } from "@/components/ui";
 import { describeOcr, recogniseScannedPages } from "@/lib/ocr-client";
 import { sendContract } from "@/lib/upload-client";
@@ -15,6 +16,7 @@ export type RepoDoc = {
   title: string;
   fileName: string;
   contractType: string;
+  entity: string;
   counterparty: string;
   tags: string[];
   isTemplate: boolean;
@@ -26,7 +28,7 @@ export type RepoDoc = {
   search: string;
 };
 
-type UploadItem = { key: string; name: string; state: "queued" | "reading" | "uploading" | "done" | "error"; note?: string; error?: string; id?: string; contractType?: string; isTemplate?: boolean };
+type UploadItem = { key: string; name: string; state: "queued" | "reading" | "uploading" | "done" | "error"; note?: string; error?: string; id?: string; contractType?: string; entity?: string; isTemplate?: boolean };
 
 const ACCEPTED = /\.(pdf|docx|txt)$/i;
 
@@ -34,6 +36,7 @@ export function RepositoryBrowser({ docs, directUpload }: { docs: RepoDoc[]; dir
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
   const [folder, setFolder] = useState<string>("all");
+  const [entity, setEntity] = useState<string>("all");
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<"recent" | "title">("recent");
   const [view, setView] = useState<"grid" | "list">("grid");
@@ -47,13 +50,20 @@ export function RepositoryBrowser({ docs, directUpload }: { docs: RepoDoc[]; dir
     return c;
   }, [docs]);
 
+  const entityCounts = useMemo(() => {
+    const c: Record<string, number> = { all: docs.length };
+    for (const d of docs) c[d.entity || "none"] = (c[d.entity || "none"] ?? 0) + 1;
+    return c;
+  }, [docs]);
+
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
     return docs
       .filter((d) => (folder === "all" ? true : folder === "templates" ? d.isTemplate : d.contractType === folder))
+      .filter((d) => (entity === "all" ? true : entity === "none" ? !d.entity : d.entity === entity))
       .filter((d) => !q || q.split(/\s+/).every((w) => d.search.includes(w)))
       .sort((a, b) => (sort === "title" ? a.title.localeCompare(b.title) : b.createdAt.localeCompare(a.createdAt)));
-  }, [docs, folder, query, sort]);
+  }, [docs, folder, entity, query, sort]);
 
   const update = (key: string, patch: Partial<UploadItem>) => setUploads((u) => u.map((x) => (x.key === key ? { ...x, ...patch } : x)));
 
@@ -81,18 +91,19 @@ export function RepositoryBrowser({ docs, directUpload }: { docs: RepoDoc[]; dir
         const fields: Record<string, string> = {};
         if (folder !== "all" && folder !== "templates") fields.contractType = folder;
         if (folder === "templates") fields.isTemplate = "true";
+        if (entity !== "all" && entity !== "none") fields.entity = entity;
         try {
           const res = await sendContract("/api/repository", files[i], fields, directUpload, ocrPages);
           const json = await res.json();
           if (!res.ok) throw new Error(json.error ?? "Upload failed");
-          update(items[i].key, { state: "done", id: json.id, contractType: json.contractType, isTemplate: folder === "templates" });
+          update(items[i].key, { state: "done", id: json.id, contractType: json.contractType, entity: json.entity, isTemplate: folder === "templates" });
         } catch (e) {
           update(items[i].key, { state: "error", error: e instanceof Error ? e.message : "Upload failed" });
         }
       }
       router.refresh();
     },
-    [directUpload, folder, router]
+    [directUpload, folder, entity, router]
   );
 
   // Dropping files anywhere on the page adds them.
@@ -126,7 +137,7 @@ export function RepositoryBrowser({ docs, directUpload }: { docs: RepoDoc[]; dir
     };
   }, [addFiles]);
 
-  const patchDoc = async (item: UploadItem, patch: { contractType?: string; isTemplate?: boolean }) => {
+  const patchDoc = async (item: UploadItem, patch: { contractType?: string; entity?: string; isTemplate?: boolean }) => {
     update(item.key, patch);
     await fetch(`/api/repository/${item.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
     router.refresh();
@@ -200,6 +211,14 @@ export function RepositoryBrowser({ docs, directUpload }: { docs: RepoDoc[]; dir
         </nav>
 
         <section>
+          <div className="entity-filter" role="group" aria-label="Entity">
+            {[["all", "All entities"], ...ENTITY_KEYS.map((k) => [k, ENTITIES[k].label]), ...(entityCounts.none ? [["none", "Not set"]] : [])].map(([key, label]) => (
+              <button key={key} className="chip" aria-pressed={entity === key} onClick={() => setEntity(key)}>
+                {label} <span className="num">{entityCounts[key] ?? 0}</span>
+              </button>
+            ))}
+          </div>
+
           <div className="toolbar">
             <div className="search" style={{ flex: 1, minWidth: 220, maxWidth: 440 }}>
               <Search />
@@ -258,7 +277,10 @@ export function RepositoryBrowser({ docs, directUpload }: { docs: RepoDoc[]; dir
                     )}
                   </div>
                   <div className="doc__body">
-                    <span className="micro">{contractTypeLabel(d.contractType)}</span>
+                    <span className="micro">
+                      {contractTypeLabel(d.contractType)}
+                      {d.entity && <span className="entity-tag">{entityLabel(d.entity)}</span>}
+                    </span>
                     <span className="doc__title">{d.title}</span>
                     {d.counterparty && <span className="caption" style={{ fontSize: "var(--text-xs)" }}>{d.counterparty}</span>}
                     <span className="doc__meta num">
@@ -276,6 +298,7 @@ export function RepositoryBrowser({ docs, directUpload }: { docs: RepoDoc[]; dir
                 <tr>
                   <th>Title</th>
                   <th>Type</th>
+                  <th>Entity</th>
                   <th>Counterparty</th>
                   <th>Clauses</th>
                   <th>Size</th>
@@ -292,7 +315,8 @@ export function RepositoryBrowser({ docs, directUpload }: { docs: RepoDoc[]; dir
                       {d.isTemplate && <span className="badge badge--brown">Template</span>}
                     </td>
                     <td className="muted">{contractTypeLabel(d.contractType)}</td>
-                    <td className="muted">{d.counterparty || "—"}</td>
+                    <td className="muted">{d.entity ? entityLabel(d.entity) : "–"}</td>
+                    <td className="muted">{d.counterparty || "–"}</td>
                     <td className="num">{d.clauses}</td>
                     <td className="muted num">{formatSize(d.size)}</td>
                     <td className="muted num">{formatDate(d.createdAt)}</td>
@@ -311,7 +335,8 @@ export function RepositoryBrowser({ docs, directUpload }: { docs: RepoDoc[]; dir
             <Upload />
             <p>Drop to add to the repository</p>
             <span className="caption" style={{ color: "var(--taupe-300)" }}>
-              {folder !== "all" ? `Files go into ${folder === "templates" ? "approved templates" : contractTypeLabel(folder)}` : "Contract types are detected automatically"}
+              {[folder !== "all" ? (folder === "templates" ? "approved templates" : contractTypeLabel(folder)) : "", entity !== "all" && entity !== "none" ? entityLabel(entity) : ""].filter(Boolean).join(" · ") ||
+                "Contract types and entities are detected automatically"}
             </span>
           </div>
         </div>
@@ -346,6 +371,14 @@ export function RepositoryBrowser({ docs, directUpload }: { docs: RepoDoc[]; dir
                           {CONTRACT_TYPE_KEYS.map((k) => (
                             <option key={k} value={k}>
                               {CONTRACT_TYPES[k].label}
+                            </option>
+                          ))}
+                        </select>
+                        <select className="select" value={u.entity ?? ""} onChange={(e) => patchDoc(u, { entity: e.target.value })} aria-label="Entity">
+                          <option value="">Entity not set</option>
+                          {ENTITY_KEYS.map((k) => (
+                            <option key={k} value={k}>
+                              {ENTITIES[k].label}
                             </option>
                           ))}
                         </select>

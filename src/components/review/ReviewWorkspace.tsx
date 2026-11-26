@@ -13,6 +13,7 @@ import { formatDate } from "@/components/ui";
 import { FindingCard, type FeedbackVerdict, type FindingFeedbackState } from "./FindingCard";
 import { ContractLoader } from "@/components/ContractLoader";
 import { SplitPane } from "@/components/SplitPane";
+import { ENTITIES, ENTITY_KEYS, entityLabel } from "@/lib/contracts/entities";
 
 type Tab = "overview" | CheckKind;
 type Filter = "open" | "issue" | "all";
@@ -186,14 +187,20 @@ export function ReviewWorkspace({ review, result, document: doc, aiAvailable, la
     return () => window.removeEventListener("keydown", onKey);
   }, [tab, activeId, visibleFindings, locate]);
 
-  async function act(kind: "rerun" | "repo" | "delete", contractType?: string) {
+  async function act(kind: "rerun" | "repo" | "delete", contractType?: string, entity?: string) {
     if (kind === "delete" && !confirm("Delete this review and the uploaded file? This cannot be undone.")) return;
     setBusy(kind);
     try {
       if (kind === "rerun") {
-        const res = await fetch(`/api/reviews/${review.id}/rerun`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contractType }) });
+        const res = await fetch(`/api/reviews/${review.id}/rerun`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contractType, entity }) });
         if (!res.ok) throw new Error();
-        toast(contractType ? `Re-checked as ${lowerLabel(contractTypeLabel(contractType))}` : "Checks re-run with the latest repository and rules");
+        toast(
+          entity !== undefined
+            ? `Re-checked as ${entity ? entityLabel(entity) : "no entity"}`
+            : contractType
+              ? `Re-checked as ${lowerLabel(contractTypeLabel(contractType))}`
+              : "Checks re-run with the latest repository and rules"
+        );
         router.refresh();
       } else if (kind === "repo") {
         const res = await fetch(`/api/reviews/${review.id}/to-repository`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
@@ -348,6 +355,24 @@ export function ReviewWorkspace({ review, result, document: doc, aiAvailable, la
             ) : (
               <span className="faint">detected</span>
             )}
+            <span aria-hidden>·</span>
+            <span className="typepick">
+              <select
+                className="select"
+                value={result.entity ?? ""}
+                disabled={!!busy}
+                aria-label="Entity"
+                onChange={(e) => act("rerun", undefined, e.target.value)}
+                title="Which of our organisations this contract is for. Changing it re-runs the checks"
+              >
+                <option value="">Entity not set</option>
+                {ENTITY_KEYS.map((k) => (
+                  <option key={k} value={k}>
+                    {ENTITIES[k].label}
+                  </option>
+                ))}
+              </select>
+            </span>
             <span aria-hidden>·</span>
             <span className="num">
               {doc.pageCount} page{doc.pageCount === 1 ? "" : "s"}

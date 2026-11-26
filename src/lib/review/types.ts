@@ -50,6 +50,7 @@ export type ClauseMatch = {
 
 export type ReviewResult = {
   contractType: string;
+  entity?: string; // nudge | delta | spark, empty when not set
   detectedType: string;
   detectedConfidence: number;
   detectedLearned?: boolean; // the type came from the model trained on corrections

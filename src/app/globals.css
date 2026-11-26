@@ -566,6 +566,32 @@ button.term__value:hover { text-decoration-color: var(--brown-700); }
 .setup-link__row { display: flex; gap: var(--space-2); align-items: center; }
 .setup-link__row .input { flex: 1; font-family: ui-monospace, Consolas, monospace; font-size: var(--text-xs); }
 
+/* entities */
+.entity-filter { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-4); }
+.entity-filter .num { opacity: 0.7; margin-left: 0.25em; }
+.entity-tag { margin-left: 0.6em; padding-left: 0.6em; border-left: 1px solid var(--rule); }
+
+/* clause library groups and custom clauses */
+.folder-group { display: flex; flex-direction: column; margin-bottom: var(--space-3); }
+.folder-group__label { padding: var(--space-2) 0.7em var(--space-1); font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-faint); }
+.folder--custom { font-style: normal; }
+.folder--custom .folder__count { font-family: var(--font-italic); font-style: italic; }
+.folder--off { opacity: 0.55; }
+.custom-editor { padding: var(--space-5); }
+.custom-card__body { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3) var(--space-4) 0; }
+.std-card--off { opacity: 0.65; }
+
+/* the three-step flow on the home page */
+.setup-steps { list-style: none; margin: 0 0 var(--space-7); padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1.5px solid var(--rule-strong); }
+.setup-steps li { display: flex; gap: var(--space-3); padding: var(--space-4) var(--space-4) var(--space-4) 0; }
+.setup-steps li + li { padding-left: var(--space-4); border-left: 1px solid var(--rule); }
+.setup-steps .idx { flex-shrink: 0; width: 28px; font-size: var(--text-xs); color: var(--text-faint); font-variant-numeric: tabular-nums; padding-top: 3px; }
+.setup-steps li.is-done .idx { color: var(--moss); }
+.setup-steps h3 { font-size: var(--text-base); font-weight: var(--weight-regular); margin: 0 0 0.3em; }
+.setup-steps p { font-size: var(--text-sm); color: var(--text-muted); margin: 0 0 0.4em; }
+.setup-steps__link { font-size: var(--text-sm); color: var(--ink); }
+@media (max-width: 900px) { .setup-steps { grid-template-columns: 1fr; } .setup-steps li + li { padding-left: 0; border-left: 0; border-top: 1px solid var(--rule); } }
+
 /* ---------- rules ---------- */
 .rule-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-4); padding: var(--space-4) 0; border-bottom: 1px solid var(--rule); align-items: start; }
 .rule-row__title { font-size: var(--text-sm); color: var(--ink); font-weight: var(--weight-regular); display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }

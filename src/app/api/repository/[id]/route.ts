@@ -4,8 +4,9 @@ import { jsonError } from "@/lib/api";
 import { deleteFile } from "@/lib/storage";
 import { learnContractType } from "@/lib/learning";
 import { CONTRACT_TYPE_KEYS, type ContractType } from "@/lib/contracts/types";
+import { isEntity } from "@/lib/contracts/entities";
 
-type Patch = { title?: string; contractType?: string; counterparty?: string; tags?: string; isTemplate?: boolean; notes?: string };
+type Patch = { title?: string; contractType?: string; entity?: string; counterparty?: string; tags?: string; isTemplate?: boolean; notes?: string };
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -13,6 +14,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const data: Patch = {};
   if (typeof body.title === "string" && body.title.trim()) data.title = body.title.trim().slice(0, 200);
   if (CONTRACT_TYPE_KEYS.includes(body.contractType as ContractType)) data.contractType = body.contractType;
+  if (isEntity(body.entity) || body.entity === "") data.entity = body.entity;
   if (typeof body.counterparty === "string") data.counterparty = body.counterparty.trim().slice(0, 200);
   if (typeof body.tags === "string") data.tags = body.tags.split(/[;,]/).map((t) => t.trim()).filter(Boolean).join(";");
   if (typeof body.isTemplate === "boolean") data.isTemplate = body.isTemplate;

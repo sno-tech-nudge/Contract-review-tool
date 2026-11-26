@@ -133,3 +133,19 @@ export const BASELINE_EXPECTED: Record<ContractType, ClauseType[]> = {
   lease: [...COMMON, "payment", "insurance", "assignment", "indemnity"],
   other: COMMON,
 };
+
+// How the clause library groups clause types, so operational terms are not
+// buried among legal boilerplate. Custom clauses choose one of these too.
+export const CLAUSE_CATEGORIES = [
+  { key: "operational", label: "Operational", types: ["scope", "term", "reporting", "audit", "branding", "notices", "insurance", "assignment"] },
+  { key: "financial", label: "Financial", types: ["payment", "fund_use", "refund", "taxes"] },
+  {
+    key: "legal",
+    label: "Legal & boilerplate",
+    types: ["parties", "definitions", "confidentiality", "ip", "indemnity", "liability", "remedies", "warranties", "termination", "survival", "force_majeure", "dispute_resolution", "governing_law", "amendment", "entire_agreement", "severability", "waiver", "relationship", "non_solicitation", "signatures"],
+  },
+  { key: "compliance", label: "Compliance", types: ["compliance", "anti_bribery", "data_protection", "safeguarding", "conflict_of_interest"] },
+] as const satisfies readonly { key: string; label: string; types: readonly ClauseType[] }[];
+
+export type ClauseCategory = (typeof CLAUSE_CATEGORIES)[number]["key"];
+export const categoryLabel = (key: string) => CLAUSE_CATEGORIES.find((c) => c.key === key)?.label ?? "Operational";

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { RepositoryBrowser } from "@/components/repository/RepositoryBrowser";
 import { blobEnabled } from "@/lib/storage";
+import { detectEntity } from "@/lib/contracts/entities";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Repository · Contract review" };
@@ -14,6 +15,7 @@ export default async function RepositoryPage() {
       title: true,
       fileName: true,
       contractType: true,
+      entity: true,
       counterparty: true,
       tags: true,
       isTemplate: true,
@@ -26,6 +28,15 @@ export default async function RepositoryPage() {
     },
   });
 
+  // contracts added before entities existed: detect theirs once
+  for (const d of docs.filter((x) => !x.entity)) {
+    const entity = detectEntity(d.text);
+    if (entity) {
+      d.entity = entity;
+      await prisma.document.update({ where: { id: d.id }, data: { entity } });
+    }
+  }
+
   return (
     <RepositoryBrowser
       directUpload={blobEnabled()}
@@ -34,6 +45,7 @@ export default async function RepositoryPage() {
         title: d.title,
         fileName: d.fileName,
         contractType: d.contractType,
+        entity: d.entity,
         counterparty: d.counterparty,
         tags: d.tags.split(";").filter(Boolean),
         isTemplate: d.isTemplate,

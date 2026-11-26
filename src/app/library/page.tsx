@@ -3,12 +3,14 @@ import { ClauseLibrary } from "@/components/library/ClauseLibrary";
 import { unwrapLines } from "@/lib/text/locate";
 import { displayClauseText } from "@/lib/library/parse";
 import { blobEnabled } from "@/lib/storage";
+import { loadCustomClauses } from "@/lib/library/custom";
+import { currentUser } from "@/lib/users";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Clause library · Contract review" };
 
 export default async function LibraryPage() {
-  const [clauses, standards] = await Promise.all([
+  const [clauses, standards, customs, me] = await Promise.all([
     prisma.clause.findMany({
       // preambles and signature blocks are specific to each contract, not reusable wording
       where: { document: { kind: "REPOSITORY" }, clauseType: { notIn: ["other", "parties", "signatures"] } },
@@ -26,12 +28,17 @@ export default async function LibraryPage() {
       orderBy: [{ position: "asc" }],
       select: { id: true, topic: true, clauseType: true, variant: true, label: true, title: true, text: true, validFor: true, jurisdiction: true, source: true, edited: true },
     }),
+    loadCustomClauses(),
+    currentUser(),
   ]);
   return (
     <ClauseLibrary
       clauses={clauses.map((c) => ({ ...c, text: unwrapLines(c.text) }))}
       standards={standards.map((s) => ({ ...s, text: displayClauseText(s.text), validFor: s.validFor.split(";").filter(Boolean) }))}
+      customs={customs}
+      canEdit={me?.role !== "member"}
       directUpload={blobEnabled()}
     />
   );
 }
+

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { ArrowLeft, Save, Trash2 } from "lucide-react";
 import { CLAUSE_TYPES, CLAUSE_TYPE_KEYS, CONTRACT_TYPES, CONTRACT_TYPE_KEYS } from "@/lib/contracts/types";
+import { ENTITIES, ENTITY_KEYS } from "@/lib/contracts/entities";
 import { DocumentViewer } from "@/components/viewer/DocumentViewer";
 import { SplitPane } from "@/components/SplitPane";
 import type { Focus } from "@/components/viewer/match";
@@ -17,6 +18,7 @@ type Doc = {
   fileName: string;
   mimeType: string;
   contractType: string;
+  entity: string;
   counterparty: string;
   tags: string;
   isTemplate: boolean;
@@ -31,7 +33,7 @@ type Doc = {
 export function RepositoryDocument({ doc, clauses }: { doc: Doc; clauses: { id: string; heading: string; text: string; clauseType: string; page: number }[] }) {
   const router = useRouter();
   const toast = useToast();
-  const [form, setForm] = useState({ title: doc.title, contractType: doc.contractType, counterparty: doc.counterparty, tags: doc.tags, isTemplate: doc.isTemplate, notes: doc.notes });
+  const [form, setForm] = useState({ title: doc.title, contractType: doc.contractType, entity: doc.entity, counterparty: doc.counterparty, tags: doc.tags, isTemplate: doc.isTemplate, notes: doc.notes });
   const [saving, setSaving] = useState(false);
   const [focus, setFocus] = useState<Focus | null>(null);
   const [active, setActive] = useState<string | null>(null);
@@ -48,7 +50,7 @@ export function RepositoryDocument({ doc, clauses }: { doc: Doc; clauses: { id: 
       toast("Could not save the clause type", "error");
     }
   };
-  const dirty = JSON.stringify(form) !== JSON.stringify({ title: doc.title, contractType: doc.contractType, counterparty: doc.counterparty, tags: doc.tags, isTemplate: doc.isTemplate, notes: doc.notes });
+  const dirty = JSON.stringify(form) !== JSON.stringify({ title: doc.title, contractType: doc.contractType, entity: doc.entity, counterparty: doc.counterparty, tags: doc.tags, isTemplate: doc.isTemplate, notes: doc.notes });
 
   const save = async () => {
     setSaving(true);
@@ -110,6 +112,17 @@ export function RepositoryDocument({ doc, clauses }: { doc: Doc; clauses: { id: 
                   {CONTRACT_TYPE_KEYS.map((k) => (
                     <option key={k} value={k}>
                       {CONTRACT_TYPES[k].label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span className="field__label">Entity</span>
+                <select className="select" value={form.entity} onChange={(e) => set("entity", e.target.value)}>
+                  <option value="">Not set</option>
+                  {ENTITY_KEYS.map((k) => (
+                    <option key={k} value={k}>
+                      {ENTITIES[k].label}
                     </option>
                   ))}
                 </select>

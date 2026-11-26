@@ -16,10 +16,11 @@ export async function POST(request: Request) {
       kind: "REPOSITORY",
       contractType: CONTRACT_TYPE_KEYS.includes(requested) ? requested : undefined,
       isTemplate: upload.fields.isTemplate === "true",
+      entity: upload.fields.entity,
       storageKey: upload.storageKey,
       ocrPages: upload.ocrPages,
     });
-    return NextResponse.json({ id: doc.id, title: doc.title, contractType: doc.contractType, pageCount: doc.pageCount });
+    return NextResponse.json({ id: doc.id, title: doc.title, contractType: doc.contractType, entity: doc.entity, pageCount: doc.pageCount });
   } catch (err) {
     return handleError(err);
   }

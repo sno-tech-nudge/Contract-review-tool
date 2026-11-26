@@ -22,6 +22,7 @@ model Document {
   size         Int
   storageKey   String
   contractType String // see CONTRACT_TYPES in src/lib/contracts/types.ts
+  entity       String   @default("") // nudge | delta | spark, see src/lib/contracts/entities.ts; empty = not set
   counterparty String   @default("")
   tags         String   @default("") // semicolon-joined
   isTemplate   Boolean  @default(false) // approved boilerplate, weighted higher when comparing
@@ -37,6 +38,7 @@ model Document {
   reviews Review[]
 
   @@index([kind, contractType])
+  @@index([entity])
 }
 
 model Clause {
@@ -218,4 +220,24 @@ model User {
   active       Boolean   @default(true)
   lastSeenAt   DateTime?
   createdAt    DateTime  @default(now())
+}
+
+// Clauses the team defines in the clause library, beyond the built-in types:
+// operational terms, programme-specific requirements. Every review of a
+// matching contract checks for them.
+model CustomClause {
+  id            String   @id @default(cuid())
+  name          String
+  category      String   @default("operational") // operational | financial | legal | compliance
+  description   String   @default("") // what it must cover, shown to reviewers
+  phrases       String   @default("") // ";"-joined wording that shows the clause is there
+  standardText  String   @default("") // the approved wording: offered as the fix and compared against
+  contractTypes String   @default("") // ";"-joined, empty = every type
+  entities      String   @default("") // ";"-joined, empty = every entity
+  required      Boolean  @default(true)
+  severity      String   @default("medium")
+  enabled       Boolean  @default(true)
+  createdBy     String   @default("")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }

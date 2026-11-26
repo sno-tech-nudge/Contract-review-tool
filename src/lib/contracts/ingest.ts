@@ -5,11 +5,13 @@ import { DocText } from "../text/locate";
 import { segment } from "./segment";
 import { guessContractType, learnContractType, learnedClauseType, loadLearnedModels } from "../learning";
 import type { ContractType } from "./types";
+import { detectEntity, isEntity } from "./entities";
 
 export type IngestOptions = {
   kind: "REPOSITORY" | "REVIEW";
   title?: string;
   contractType?: ContractType | "";
+  entity?: string; // nudge | delta | spark; detected when not given
   counterparty?: string;
   tags?: string;
   isTemplate?: boolean;
@@ -64,6 +66,7 @@ async function ingest(buffer: Buffer, fileName: string, opts: IngestOptions) {
       size: buffer.length,
       storageKey,
       contractType: opts.contractType || detected.type,
+      entity: isEntity(opts.entity) ? opts.entity : detectEntity(doc.full),
       counterparty: opts.counterparty ?? "",
       tags: opts.tags ?? "",
       isTemplate: opts.isTemplate ?? false,
