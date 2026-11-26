@@ -14,9 +14,10 @@ import { FindingCard, type FeedbackVerdict, type FindingFeedbackState } from "./
 import { ContractLoader } from "@/components/ContractLoader";
 import { SplitPane } from "@/components/SplitPane";
 import { ContractFacts } from "@/components/review/ContractFacts";
+import { AskPanel } from "@/components/review/AskPanel";
 import { ENTITIES, ENTITY_KEYS, entityLabel } from "@/lib/contracts/entities";
 
-type Tab = "overview" | CheckKind;
+type Tab = "overview" | CheckKind | "ask";
 type Filter = "open" | "issue" | "all";
 
 type Props = {
@@ -173,7 +174,7 @@ export function ReviewWorkspace({ review, result, document: doc, aiAvailable, la
   // j / k move through the findings on the current tab and show each one.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (tab === "overview" || (e.key !== "j" && e.key !== "k")) return;
+      if (tab === "overview" || tab === "ask" || (e.key !== "j" && e.key !== "k")) return;
       const t = e.target as HTMLElement;
       if (t.closest("input, textarea, select")) return;
       const list = visibleFindings(tab);
@@ -228,6 +229,7 @@ export function ReviewWorkspace({ review, result, document: doc, aiAvailable, la
     { key: "overview", label: "Overview" },
     ...CHECKS.map((c) => ({ key: c.key as Tab, label: c.label, n: count(byCheck[c.key]), alert: count(byCheck[c.key], "issue") > 0 })),
     ...(aiAvailable || byCheck.ai.length ? [{ key: "ai" as Tab, label: "AI", n: count(byCheck.ai), alert: count(byCheck.ai, "issue") > 0 }] : []),
+    { key: "ask" as Tab, label: "Ask" },
   ];
 
   const switchTab = (t: Tab) => {
@@ -400,6 +402,8 @@ export function ReviewWorkspace({ review, result, document: doc, aiAvailable, la
         </div>
 
         <div className="side__body" ref={bodyRef}>
+          {tab === "ask" && <AskPanel reviewId={review.id} aiOn={aiAvailable} onLocate={(r) => locate(r)} />}
+
           {tab === "overview" && (
             <>
               <div className="risk block">

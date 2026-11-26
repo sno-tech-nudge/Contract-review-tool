@@ -54,6 +54,12 @@ export function learnedClauseType(heading: string, text: string, models: Learned
 }
 
 // Records who caused it when a person did, so the log can say so.
+// Clause types people confirmed, plus the clause library's typed wording.
+export async function clauseExamples() {
+  const rows = await prisma.trainingExample.findMany({ where: { kind: "clause_type" }, select: { label: true, text: true, sourceId: true } });
+  return rows.map((r) => ({ label: r.label, text: r.text, fromPerson: !r.sourceId.startsWith("library:") }));
+}
+
 export async function logLearning(kind: string, summary: string) {
   const by = await actingUser();
   await prisma.learningEvent.create({ data: { kind, summary, userName: by?.kind === "person" ? by.name : "" } });

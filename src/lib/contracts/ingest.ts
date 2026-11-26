@@ -3,7 +3,9 @@ import { extractText, mergeOcr, mimeFor } from "../extract";
 import { deleteFile, saveFile } from "../storage";
 import { DocText } from "../text/locate";
 import { segment } from "./segment";
-import { guessContractType, learnContractType, learnedClauseType, loadLearnedModels } from "../learning";
+import { clauseExamples, guessContractType, learnContractType, learnedClauseType, loadLearnedModels } from "../learning";
+import { applyLearnedTypes } from "../review/semantic";
+import { tryEmbedPassages } from "../embeddings";
 import type { ContractType } from "./types";
 import { detectEntity, isEntity } from "./entities";
 
@@ -54,7 +56,11 @@ async function ingest(buffer: Buffer, fileName: string, opts: IngestOptions) {
 
   const models = await loadLearnedModels();
   const detected = guessContractType(doc.full, models);
-  const segments = segment(doc, (h, t) => learnedClauseType(h, t, models));
+  // types people confirmed for near-identical clauses, by meaning when the
+  // model is available (it also caches the vectors later reviews compare against)
+  let segments = segment(doc, (h, t) => learnedClauseType(h, t, models));
+  const vectors = await tryEmbedPassages(segments.map((s) => `${s.heading} ${s.text}`));
+  if (vectors) segments = await applyLearnedTypes(segments, vectors, await clauseExamples());
   const storageKey = opts.storageKey ?? (await saveFile(buffer, fileName, mimeType));
 
   const created = await prisma.document.create({

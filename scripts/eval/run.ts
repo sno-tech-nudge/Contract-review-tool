@@ -24,6 +24,23 @@ import { runBoilerplateCheck } from "../../src/lib/checks/boilerplate";
 import { runLegalCheck } from "../../src/lib/checks/legal";
 import { extractKeyTerms } from "../../src/lib/checks/keyterms";
 import { BASELINE_EXPECTED, type ClauseType, type ContractType } from "../../src/lib/contracts/types";
+import { applyLearnedTypes, embedReview } from "../../src/lib/review/semantic";
+import type { LibraryEntry } from "../../src/lib/library";
+
+// The clause library and people's corrections come from the local database
+// when it is running, so the test set exercises the same meaning layer as a
+// review. Without it (or with --words-only) only word matching is tested.
+async function loadLearning(): Promise<{ library: LibraryEntry[]; examples: { label: string; text: string; fromPerson: boolean }[] } | null> {
+  if (process.argv.includes("--words-only")) return null;
+  try {
+    const { loadLibrary } = await import("../../src/lib/library");
+    const { clauseExamples } = await import("../../src/lib/learning");
+    return { library: await loadLibrary(), examples: await clauseExamples() };
+  } catch {
+    return null;
+  }
+}
+let learning: Awaited<ReturnType<typeof loadLearning>> = null;
 
 type Case = {
   name: string;
@@ -56,15 +73,33 @@ function isNoise(text: string): boolean {
   return words.length < 8 || letters / Math.max(1, t.length) < 0.6;
 }
 
-async function runCase(c: Case) {
+async function readCase(c: Case) {
   const buffer = fs.readFileSync(path.join(GOLD, "files", c.file));
   const ocr = c.ocr ? JSON.parse(fs.readFileSync(path.join(GOLD, "files", c.ocr), "utf8")) : undefined;
   const extracted = await extractText(buffer, "application/pdf");
   const doc = new DocText(mergeOcr(extracted.pages, ocr).pages);
+  return { case: c, doc, segments: segment(doc) };
+}
+type Read = Awaited<ReturnType<typeof readCase>>;
+
+// Each contract is reviewed with the other contracts as its repository, as
+// it would be in use.
+async function runCase(r: Read, others: Read[]) {
+  const { case: c, doc } = r;
+  const repository = others.map((o) => ({
+    id: o.case.file,
+    title: o.case.name,
+    contractType: o.case.contractType,
+    isTemplate: false,
+    text: o.doc.full,
+    clauses: o.segments.map((s) => ({ heading: s.heading, text: s.text, clauseType: s.type })),
+  }));
 
   const type = detectContractType(doc.full).type;
-  const segments = segment(doc);
-  const boilerplate = runBoilerplateCheck({ doc, segments, contractType: c.contractType, repository: [] });
+  let segments = r.segments;
+  const semantic = learning ? await embedReview({ segments, repositoryClauses: repository.flatMap((d) => d.clauses), libraryClauses: learning.library }) : null;
+  if (semantic && learning) segments = await applyLearnedTypes(segments, semantic.segments, learning.examples);
+  const boilerplate = runBoilerplateCheck({ doc, segments, contractType: c.contractType, repository, library: learning?.library ?? [], semantic });
   const legal = runLegalCheck(doc, c.contractType, new Set());
   const keyTerms = extractKeyTerms(doc);
   const findings = [...boilerplate.findings, ...legal.findings];
@@ -95,6 +130,7 @@ async function runCase(c: Case) {
   const forbidden = c.mustNot.flatMap((p) => keys.filter((k) => k.startsWith(p)));
 
   const noise = segments.filter((s) => isNoise(s.text)).length;
+  const wordingWarnings = findings.filter((f) => f.status === "warning" && (f.ruleKey ?? "").startsWith("bp:wording")).length;
   return {
     name: c.name,
     type: { got: type, want: c.contractType, ok: type === c.contractType },
@@ -104,6 +140,7 @@ async function runCase(c: Case) {
     missingFindings: { falseAlarms: falseMissing, correct: rightMissing.length, missed: missedMissing },
     keyTerms: { parties: partiesFound.length, of: c.parties.length, amount: amountFound },
     findings: { mustMissing, forbidden },
+    wordingWarnings,
   };
 }
 
@@ -126,6 +163,7 @@ function summarise(results: Result[]) {
     amounts: pct(sum((r) => +r.keyTerms.amount), results.length),
     forbiddenFindings: sum((r) => r.findings.forbidden.length),
     requiredFindingsMissing: sum((r) => r.findings.mustMissing.length),
+    wordingWarnings: sum((r) => r.wordingWarnings),
   };
 }
 
@@ -144,9 +182,13 @@ async function main() {
     .filter((f) => f.endsWith(".json") && (!only || f.startsWith(only)))
     .map((f) => ({ absent: [], present: [], sections: [], parties: [], amount: [], must: [], mustNot: [], maxSegments: 999, ...JSON.parse(fs.readFileSync(path.join(casesDir, f), "utf8")) }) as Case);
 
+  learning = await loadLearning();
+  console.log(learning ? `Meaning layer on: ${learning.library.length} library clauses, ${learning.examples.filter((e) => e.fromPerson).length} corrections` : "Word matching only");
+  const read: Read[] = [];
+  for (const c of cases) read.push(await readCase(c));
   const results: Result[] = [];
-  for (const c of cases) {
-    const r = await runCase(c);
+  for (const one of read) {
+    const r = await runCase(one, read.filter((o) => o !== one));
     results.push(r);
     const flag = (ok: boolean) => (ok ? "ok  " : "FAIL");
     console.log(`\n${r.name}`);
@@ -182,4 +224,4 @@ async function main() {
   }
 }
 
-main();
+main().then(() => process.exit(process.exitCode ?? 0));

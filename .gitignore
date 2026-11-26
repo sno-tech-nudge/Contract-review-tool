@@ -21,3 +21,6 @@ npm-debug.log*
 # accuracy test set: real contracts, never committed
 /eval/gold/
 /eval/results/
+
+# downloaded model files
+/.cache/

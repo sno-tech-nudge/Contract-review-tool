@@ -7,6 +7,8 @@ import { cosine, TfIdf, tokenize } from "../text/similarity";
 import type { DocText } from "../text/locate";
 import { excerpt } from "../text/locate";
 import type { Finding } from "../review/types";
+import { similarity, type Vector } from "../embeddings";
+import { SAME_MEANING } from "../review/semantic";
 
 // Clauses the team defines in the clause library (operational terms,
 // programme requirements) and the check that looks for them in a contract.
@@ -55,7 +57,15 @@ const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const DIFFERENT = 0.3;
 const PRESENT = 0.45;
 
-export function runCustomClauseCheck(input: { doc: DocText; segments: Segment[]; contractType: string; entity: string; clauses: CustomClause[] }) {
+export function runCustomClauseCheck(input: {
+  doc: DocText;
+  segments: Segment[];
+  contractType: string;
+  entity: string;
+  clauses: CustomClause[];
+  // meaning vectors for the contract's clauses and each clause's standard wording
+  semantic?: { segments: Vector[]; standards: Map<string, Vector> } | null;
+}) {
   const { doc, segments, contractType, entity } = input;
   const clauses = input.clauses.filter((c) => appliesTo(c, contractType, entity));
   const findings: Finding[] = [];
@@ -70,7 +80,14 @@ export function runCustomClauseCheck(input: { doc: DocText; segments: Segment[];
     const source = `Your clause library: ${c.name}`;
     const base = { id: `custom-${c.id}`, ruleKey: `custom:${c.id}`, check: "boilerplate" as const, category: "Your clauses" };
     const standard = c.standardText ? idf.vector(tokenize(c.standardText)) : null;
-    const similarityOf = (s: Segment) => (standard ? cosine(segVectors[segments.indexOf(s)], standard) : null);
+    const meaning = input.semantic?.standards.get(c.id);
+    const meaningOf = (s: Segment) => (meaning && input.semantic ? similarity(input.semantic.segments[segments.indexOf(s)], meaning) : 0);
+    // the better of word overlap and, when it clearly says the same thing, meaning
+    const similarityOf = (s: Segment) => {
+      if (!standard) return null;
+      const words = cosine(segVectors[segments.indexOf(s)], standard);
+      return meaningOf(s) >= SAME_MEANING ? Math.max(words, meaningOf(s)) : words;
+    };
 
     // a tell-tale phrase, or a heading with the clause's name
     let where: { quote: string; page: number; segment?: Segment; phrase: string } | null = null;

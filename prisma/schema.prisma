@@ -244,3 +244,13 @@ model CustomClause {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
+
+// Meaning vectors ("embeddings") for clause and question text, computed by a
+// small open model running inside the app. Keyed by a hash of the model and
+// the text, so each piece of text is embedded once and reused.
+model Embedding {
+  hash      String   @id
+  model     String
+  vector    Bytes // Float32Array, normalised
+  createdAt DateTime @default(now())
+}

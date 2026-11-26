@@ -8,6 +8,7 @@ import { MODEL_CLAUSES, MODEL_CLAUSE_SOURCE } from "./model-clauses";
 import type { LibraryEntry } from "../library";
 import { displayClauseText } from "../library/parse";
 import { pluralTypeName, splitTypes, usLawReference, validForPhrase } from "../library/interpret";
+import { bestMatch, SAME_CLAUSE, SAME_MEANING, type Semantic } from "../review/semantic";
 
 export type RepoDocument = {
   id: string;
@@ -163,8 +164,11 @@ export function runBoilerplateCheck(input: {
   repository: RepoDocument[];
   library?: LibraryEntry[];
   entity?: string;
+  // meaning vectors, aligned with segments, the repository's clauses (in
+  // document then clause order) and the library; null when unavailable
+  semantic?: Semantic | null;
 }): Pick<ReviewResult, "clauses" | "comparedWith" | "coverage"> & { findings: Finding[] } {
-  const { doc, segments, contractType, repository, library: libraryEntries = [], entity = "" } = input;
+  const { doc, segments, contractType, repository, library: libraryEntries = [], entity = "", semantic = null } = input;
   const findings: Finding[] = [];
   // Ids and rule keys describe what a finding is about, not its order, so
   // feedback stays attached to the right finding across re-runs and reviews.
@@ -279,6 +283,12 @@ export function runBoilerplateCheck(input: {
       }
     }
     if (libScore < LIBRARY_MATCH) lib = null;
+    // a library version reworded beyond word matching, recognised by meaning
+    const segVec = semantic?.segments[i];
+    if (!lib && segVec && semantic && s.type !== "other") {
+      const m = bestMatch(segVec, semantic.library, (j) => s.types.includes(library[j].types[0]));
+      if (m && m.score >= SAME_CLAUSE) [lib, libScore] = [library[m.index], m.score];
+    }
     // a close library version is a better reference than looser repository drafting
     const libraryIsReference = !!lib && libScore > bestScore;
     if (libraryIsReference) bestScore = libScore;
@@ -294,9 +304,27 @@ export function runBoilerplateCheck(input: {
         ? { text: unwrapLines(best.text), source: best.docTitle + (best.isTemplate ? " (approved template)" : ""), documentId: best.docId }
         : undefined;
 
+    // Worded differently, but does it mean the same as standard wording?
+    let sameMeaning: { source: string; score: number } | null = null;
+    if (segVec && semantic && similarity !== null && similarity < ALIGNED && s.type !== "other") {
+      const repo = bestMatch(segVec, semantic.repository, (j) => repoClauses[j].types.includes(s.type));
+      const libm = bestMatch(segVec, semantic.library, (j) => library[j].types[0] === s.type && !library[j].us);
+      const top = [repo && { source: repoClauses[repo.index].docTitle, score: repo.score }, libm && { source: librarySource(library[libm.index]), score: libm.score }]
+        .filter((x): x is { source: string; score: number } => !!x)
+        .sort((a, b) => b.score - a.score)[0];
+      if (top && top.score >= SAME_MEANING) sameMeaning = top;
+    }
+
     if (reference && similarity !== null && s.type !== "parties" && s.type !== "signatures") {
       const pct = Math.round(similarity * 100);
-      if (similarity >= ALIGNED) {
+      if (sameMeaning) {
+        findings.push({
+          id: `bp-wording-${s.position}`, ruleKey: `bp:wording:${s.type}`, check: "boilerplate", category: label, status: "pass", severity: "info",
+          title: `${label} means the same as standard wording`,
+          detail: `Worded differently, but it says the same as "${sameMeaning.source}" (${Math.round(sameMeaning.score * 100)}% match in meaning).`,
+          quote, page: s.page,
+        });
+      } else if (similarity >= ALIGNED) {
         findings.push({
           id: `bp-wording-${s.position}`, ruleKey: `bp:wording:${s.type}`, check: "boilerplate", category: label, status: "pass", severity: "info",
           title: `${label} follows standard wording`,
@@ -351,7 +379,9 @@ export function runBoilerplateCheck(input: {
       let top = 0;
       for (const c of repoClauses) top = Math.max(top, cosine(vector, c.vector));
       for (const l of library) top = Math.max(top, cosine(vector, l.vector));
-      if (top < 0.2) {
+      // nothing similar in words or in meaning
+      const meaning = segVec && semantic ? Math.max(bestMatch(segVec, semantic.repository, () => true)?.score ?? 0, bestMatch(segVec, semantic.library, () => true)?.score ?? 0) : 0;
+      if (top < 0.2 && meaning < 0.72) {
         findings.push({
           id: `bp-unfamiliar-${s.position}`, ruleKey: "bp:unfamiliar", check: "boilerplate", category: "Unfamiliar clause", status: "warning", severity: "low",
           title: `Unfamiliar clause: ${s.heading}`,

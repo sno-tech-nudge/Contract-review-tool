@@ -7,7 +7,9 @@ import { extractKeyTerms, ruleSummary } from "../checks/keyterms";
 import { disabledLegalRules, runLegalCheck } from "../checks/legal";
 import { DocText } from "../text/locate";
 import { aiEnabled, aiModel } from "../ai/claude";
-import { guessContractType, learnContractType, learnedClauseType, loadLearnedModels } from "../learning";
+import { clauseExamples, guessContractType, learnContractType, learnedClauseType, loadLearnedModels } from "../learning";
+import { applyLearnedTypes, embedReview } from "./semantic";
+import { tryEmbedPassages } from "../embeddings";
 import { applyCalibration, loadCalibration } from "../learning/calibration";
 import { loadLibrary } from "../library";
 import { loadCustomClauses, runCustomClauseCheck } from "../library/custom";
@@ -68,11 +70,26 @@ export async function runReview(documentId: string, opts: { contractType?: Contr
   ]);
 
   await stage("Splitting it into clauses");
-  const segments = segment(doc, (h, t) => learnedClauseType(h, t, models));
+  // Clauses, then their meaning: vectors for this contract, the repository and
+  // the library, and the types people confirmed for near-identical clauses.
+  // Without the model (it failed to load) word matching does the same job.
+  let segments = segment(doc);
+  const semantic = await embedReview({ segments, repositoryClauses: repository.flatMap((d) => d.clauses), libraryClauses: library });
+  if (semantic) segments = await applyLearnedTypes(segments, semantic.segments, await clauseExamples());
+  else segments = segment(doc, (h, t) => learnedClauseType(h, t, models));
   await stage("Comparing wording with the repository and clause library");
-  const boilerplate = runBoilerplateCheck({ doc, segments, contractType, repository, library, entity: document.entity });
+  const boilerplate = runBoilerplateCheck({ doc, segments, contractType, repository, library, entity: document.entity, semantic });
   // clauses the team added to the clause library for this kind of contract
-  const custom = runCustomClauseCheck({ doc, segments, contractType, entity: document.entity, clauses: customClauses });
+  const withWording = customClauses.filter((c) => c.standardText);
+  const standardVectors = semantic && withWording.length ? await tryEmbedPassages(withWording.map((c) => c.standardText)) : null;
+  const custom = runCustomClauseCheck({
+    doc,
+    segments,
+    contractType,
+    entity: document.entity,
+    clauses: customClauses,
+    semantic: semantic && standardVectors ? { segments: semantic.segments, standards: new Map(withWording.map((c, i) => [c.id, standardVectors[i]])) } : null,
+  });
   boilerplate.findings.push(...custom.findings);
   boilerplate.coverage = { ...boilerplate.coverage, expected: boilerplate.coverage.expected + custom.expected, present: boilerplate.coverage.present + Math.min(custom.present, custom.expected) };
   await stage("Checking the law");

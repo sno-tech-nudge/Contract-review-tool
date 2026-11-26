@@ -4,11 +4,12 @@
  "clauseTypeRecall": 96.7,
  "clauseTypeWrong": 0,
  "missingClausePrecision": 100,
- "missingClauseRecall": 100,
+ "missingClauseRecall": 63.3,
  "noiseClauses": 1.8,
  "fragmented": 0,
  "parties": 57.1,
  "amounts": 62.5,
  "forbiddenFindings": 0,
- "requiredFindingsMissing": 0
+ "requiredFindingsMissing": 0,
+ "wordingWarnings": 126
 }
