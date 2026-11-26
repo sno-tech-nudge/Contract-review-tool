@@ -592,7 +592,16 @@ button.term__value:hover { text-decoration-color: var(--brown-700); }
 .setup-steps__link { font-size: var(--text-sm); color: var(--ink); }
 @media (max-width: 900px) { .setup-steps { grid-template-columns: 1fr; } .setup-steps li + li { padding-left: 0; border-left: 0; border-top: 1px solid var(--rule); } }
 
+/* contract facts */
+.facts-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+.fact-source { font-family: var(--font-italic); font-style: italic; font-size: var(--text-xs); color: var(--text-faint); }
+@container side (max-width: 520px) { .facts-form { grid-template-columns: 1fr; } }
+
 /* ---------- rules ---------- */
+.exception-row { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2); flex-wrap: wrap; }
+.exception-row .select { width: auto; flex: 0 1 auto; }
+.exception-row .input { flex: 1 1 140px; min-width: 120px; }
+.exception-row__op, .exception-row__unit { font-size: var(--text-sm); color: var(--text-muted); white-space: nowrap; }
 .rule-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-4); padding: var(--space-4) 0; border-bottom: 1px solid var(--rule); align-items: start; }
 .rule-row__title { font-size: var(--text-sm); color: var(--ink); font-weight: var(--weight-regular); display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
 .rule-row__ref { font-size: var(--text-xs); color: var(--text-muted); margin-top: 0.3em; line-height: 1.5; }

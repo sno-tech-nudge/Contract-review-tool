@@ -6,6 +6,7 @@ import { findAmounts, formatInr } from "../text/amounts";
 import type { DocText } from "../text/locate";
 import type { Finding } from "../review/types";
 import type { BusinessRuleKind } from "./business-kinds";
+import { evaluateExceptions, parseConditions, type ContractFacts } from "./facts";
 
 export { BUSINESS_RULE_KINDS, type BusinessRuleKind } from "./business-kinds";
 
@@ -14,17 +15,28 @@ export { BUSINESS_RULE_KINDS, type BusinessRuleKind } from "./business-kinds";
 
 const phrases = (p: string) => p.split(";").map((s) => s.trim().toLowerCase()).filter(Boolean);
 
-function ruleApplies(rule: BusinessRule, contractType: ContractType): boolean {
+function ruleApplies(rule: BusinessRule, contractType: ContractType, entity: string): boolean {
   const types = rule.appliesTo.split(";").filter(Boolean);
-  return types.length === 0 || types.includes(contractType);
+  const entities = (rule.entities ?? "").split(";").filter(Boolean);
+  return (types.length === 0 || types.includes(contractType)) && (entities.length === 0 || (!!entity && entities.includes(entity)));
 }
 
-export function runBusinessCheck(doc: DocText, segments: Segment[], contractType: ContractType, rules: BusinessRule[]): { findings: Finding[]; rulesRun: number } {
+export function runBusinessCheck(
+  doc: DocText,
+  segments: Segment[],
+  contractType: ContractType,
+  rules: BusinessRule[],
+  context: { entity?: string; facts?: ContractFacts } = {}
+): { findings: Finding[]; rulesRun: number } {
+  const { entity = "", facts = {} } = context;
   const findings: Finding[] = [];
   let rulesRun = 0;
   for (const rule of rules) {
-    if (!rule.enabled || !ruleApplies(rule, contractType)) continue;
+    if (!rule.enabled || !ruleApplies(rule, contractType, entity)) continue;
     rulesRun++;
+    // an exception that holds excuses the rule; one that depends on a fact
+    // nobody knows yet is mentioned so the reviewer can supply it
+    const exceptions = evaluateExceptions(parseConditions(rule.exceptions ?? "[]"), facts, doc.full);
     const base = {
       id: `biz-${rule.id}`,
       ruleKey: `biz:${rule.id}`,
@@ -35,7 +47,12 @@ export function runBusinessCheck(doc: DocText, segments: Segment[], contractType
       recommendation: rule.guidance || undefined,
     };
     const ok = (detail: string, quote?: string, page?: number): Finding => ({ ...base, status: "pass", severity: "info", detail, quote, page, recommendation: undefined });
-    const flag = (detail: string, quote?: string, page?: number): Finding => ({ ...base, status: "issue", detail, quote, page });
+    const unknownNote = exceptions.unknown.length ? ` This rule does not apply when ${exceptions.unknown.join(", or when ")}: add that under Contract facts on the Overview to check.` : "";
+    const flag = (detail: string, quote?: string, page?: number): Finding => ({ ...base, status: "issue", detail: (unknownNote && !/[.!?]$/.test(detail) ? `${detail}.` : detail) + unknownNote, quote, page });
+    if (exceptions.excused) {
+      findings.push(ok(`Not applied: ${exceptions.excused}.`));
+      continue;
+    }
 
     switch (rule.kind as BusinessRuleKind) {
       case "REQUIRE_PHRASE": {

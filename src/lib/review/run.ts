@@ -11,6 +11,7 @@ import { guessContractType, learnContractType, learnedClauseType, loadLearnedMod
 import { applyCalibration, loadCalibration } from "../learning/calibration";
 import { loadLibrary } from "../library";
 import { loadCustomClauses, runCustomClauseCheck } from "../library/custom";
+import { contractFacts } from "../checks/facts-detect";
 import { isMuted, riskScore, SEVERITY_ORDER, type Finding, type ReviewResult } from "./types";
 
 const STATUS_ORDER = { issue: 0, warning: 1, pass: 2 } as const;
@@ -77,9 +78,10 @@ export async function runReview(documentId: string, opts: { contractType?: Contr
   await stage("Checking the law");
   const legal = runLegalCheck(doc, contractType, disabled);
   await stage("Checking business rules");
-  const business = runBusinessCheck(doc, segments, contractType, businessRules);
-  await stage("Scoring the risk");
   const keyTerms = extractKeyTerms(doc);
+  const facts = contractFacts(doc, keyTerms, document.factsJson, document.counterparty);
+  const business = runBusinessCheck(doc, segments, contractType, businessRules, { entity: document.entity, facts: facts.facts });
+  await stage("Scoring the risk");
 
   // Past feedback mutes, lowers or raises checks for this contract type.
   const findings = sortFindings(applyCalibration([...boilerplate.findings, ...legal.findings, ...business.findings], contractType, calibration));
@@ -103,6 +105,7 @@ export async function runReview(documentId: string, opts: { contractType?: Contr
   const result: ReviewResult = {
     contractType,
     entity: document.entity,
+    facts: { values: facts.facts, source: facts.source },
     detectedType: detected.type,
     detectedConfidence: detected.confidence,
     detectedLearned: detected.learned,

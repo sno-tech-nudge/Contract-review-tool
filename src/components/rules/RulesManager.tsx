@@ -7,6 +7,8 @@ import { BUSINESS_RULE_KINDS, type BusinessRuleKind } from "@/lib/checks/busines
 import { CLAUSE_TYPES, CLAUSE_TYPE_KEYS, CONTRACT_TYPES, CONTRACT_TYPE_KEYS, clauseTypeLabel, contractTypeLabel, type Severity, lowerLabel } from "@/lib/contracts/types";
 import { SEVERITY_LABEL } from "@/lib/review/types";
 import { SeverityBadge } from "@/components/ui";
+import { ENTITIES, ENTITY_KEYS, entityLabel } from "@/lib/contracts/entities";
+import { describeCondition, FACT_FIELDS, type Condition, type ConditionField } from "@/lib/checks/facts";
 import { useToast } from "@/components/Toast";
 
 type LegalRow = { id: string; law: string; title: string; reference: string; severity: Severity; appliesWhen: string; enabled: boolean };
@@ -19,13 +21,16 @@ type BusinessRow = {
   threshold: number | null;
   severity: string;
   appliesTo: string[];
+  entities: string[];
+  exceptions: Condition[];
   guidance: string;
   enabled: boolean;
 };
 
 type Draft = Omit<BusinessRow, "id"> & { id?: string };
 
-const EMPTY: Draft = { name: "", description: "", kind: "REQUIRE_PHRASE", pattern: "", threshold: null, severity: "medium", appliesTo: [], guidance: "", enabled: true };
+const EMPTY: Draft = { name: "", description: "", kind: "REQUIRE_PHRASE", pattern: "", threshold: null, severity: "medium", appliesTo: [], entities: [], exceptions: [], guidance: "", enabled: true };
+const CONDITION_FIELDS = Object.keys(FACT_FIELDS) as ConditionField[];
 
 function describeRule(r: BusinessRow): string {
   const list = r.pattern.split(";").map((p) => p.trim()).filter(Boolean);
@@ -185,7 +190,11 @@ export function RulesManager({ initialTab, laws, legal, business, prefill }: { i
                   </div>
                   <div className="rule-row__ref">{describeRule(r)}</div>
                   {r.description && <div className="rule-row__when">{r.description}</div>}
-                  <div className="rule-row__when">Applies to: {r.appliesTo.length ? r.appliesTo.map(contractTypeLabel).join(", ") : "all contract types"}</div>
+                  <div className="rule-row__when">
+                    Applies to: {r.appliesTo.length ? r.appliesTo.map(contractTypeLabel).join(", ") : "all contract types"}
+                    {r.entities.length > 0 && ` · for ${r.entities.map(entityLabel).join(", ")}`}
+                  </div>
+                  {r.exceptions.length > 0 && <div className="rule-row__when">Except when {r.exceptions.map(describeCondition).join(", or when ")}</div>}
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "var(--space-1)" }}>
                   <button
@@ -301,6 +310,92 @@ export function RulesManager({ initialTab, laws, legal, business, prefill }: { i
                     </button>
                   ))}
                 </div>
+              </div>
+
+              <div className="field">
+                <span className="field__label">For</span>
+                <div className="chips">
+                  <button type="button" className="chip" aria-pressed={draft.entities.length === 0} onClick={() => setDraft((d) => (d ? { ...d, entities: [] } : d))}>
+                    Every entity
+                  </button>
+                  {ENTITY_KEYS.map((k) => (
+                    <button
+                      type="button"
+                      key={k}
+                      className="chip"
+                      aria-pressed={draft.entities.includes(k)}
+                      onClick={() => setDraft((d) => (d ? { ...d, entities: d.entities.includes(k) ? d.entities.filter((x) => x !== k) : [...d.entities, k] } : d))}
+                    >
+                      {ENTITIES[k].label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="field">
+                <span className="field__label">Exceptions: the rule does not apply when</span>
+                {draft.exceptions.map((c, i) => {
+                  const numeric = FACT_FIELDS[c.field].numeric;
+                  const change = (patch: Partial<Condition>) =>
+                    setDraft((d) => (d ? { ...d, exceptions: d.exceptions.map((x, j) => (j === i ? ({ ...x, ...patch } as Condition) : x)) } : d));
+                  return (
+                    <div className="exception-row" key={i}>
+                      <select
+                        className="select"
+                        value={c.field}
+                        aria-label="Fact"
+                        onChange={(e) => {
+                          const field = e.target.value as ConditionField;
+                          change({ field, op: FACT_FIELDS[field].numeric ? "lt" : "contains", value: "" });
+                        }}
+                      >
+                        {CONDITION_FIELDS.map((f) => (
+                          <option key={f} value={f}>
+                            {FACT_FIELDS[f].label}
+                          </option>
+                        ))}
+                      </select>
+                      {numeric ? (
+                        <select className="select" value={c.op} aria-label="Comparison" onChange={(e) => change({ op: e.target.value as Condition["op"] })}>
+                          <option value="lt">is below</option>
+                          <option value="gt">is above</option>
+                        </select>
+                      ) : (
+                        <span className="exception-row__op">{c.field === "wording" ? "includes" : "name includes"}</span>
+                      )}
+                      <input
+                        className="input"
+                        value={c.value}
+                        inputMode={numeric ? "numeric" : undefined}
+                        aria-label="Value"
+                        placeholder={c.field === "value" ? "200000" : c.field === "months" ? "6" : c.field === "employees" ? "10" : c.field === "counterparty" ? "e.g. Government of" : "e.g. as per the funder's standard terms"}
+                        onChange={(e) => change({ value: e.target.value })}
+                      />
+                      {numeric && c.value && Number.isFinite(Number(c.value.replace(/,/g, ""))) && (
+                        <span className="exception-row__unit">{c.field === "value" ? `₹${Number(c.value.replace(/,/g, "")).toLocaleString("en-IN")}` : FACT_FIELDS[c.field].unit}</span>
+                      )}
+                      <button
+                        type="button"
+                        className="btn btn--ghost btn--icon btn--sm"
+                        aria-label="Remove this exception"
+                        onClick={() => setDraft((d) => (d ? { ...d, exceptions: d.exceptions.filter((_, j) => j !== i) } : d))}
+                      >
+                        <X />
+                      </button>
+                    </div>
+                  );
+                })}
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--sm"
+                  style={{ alignSelf: "flex-start" }}
+                  onClick={() => setDraft((d) => (d ? { ...d, exceptions: [...d.exceptions, { field: "value", op: "lt", value: "" }] } : d))}
+                >
+                  <Plus /> Add an exception
+                </button>
+                <span className="field__help">
+                  Value, duration and counterparty are read from each contract. Counterparty employees is entered by a reviewer; until then the rule still runs and says what to confirm.
+                </span>
               </div>
 
               <label className="field">

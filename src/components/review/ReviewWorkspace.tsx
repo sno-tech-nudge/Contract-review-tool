@@ -13,6 +13,7 @@ import { formatDate } from "@/components/ui";
 import { FindingCard, type FeedbackVerdict, type FindingFeedbackState } from "./FindingCard";
 import { ContractLoader } from "@/components/ContractLoader";
 import { SplitPane } from "@/components/SplitPane";
+import { ContractFacts } from "@/components/review/ContractFacts";
 import { ENTITIES, ENTITY_KEYS, entityLabel } from "@/lib/contracts/entities";
 
 type Tab = "overview" | CheckKind;
@@ -457,6 +458,8 @@ export function ReviewWorkspace({ review, result, document: doc, aiAvailable, la
                   </div>
                 </div>
               )}
+
+              {result.facts && <ContractFacts reviewId={review.id} facts={result.facts.values} source={result.facts.source} />}
 
               <div className="block">
                 <div className="block__head">

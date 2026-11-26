@@ -1,3 +1,4 @@
+import { parseConditions } from "@/lib/checks/facts";
 import { prisma } from "@/lib/db";
 import { ensureStarterRules } from "@/lib/checks/business";
 import { LAWS, LEGAL_RULES } from "@/lib/checks/legal/rules";
@@ -23,6 +24,8 @@ export default async function RulesPage({ searchParams }: { searchParams: Promis
       threshold: null,
       severity: missed.severity,
       appliesTo: [missed.contractType],
+      entities: [],
+      exceptions: [],
       guidance: "",
       enabled: true,
     };
@@ -37,7 +40,14 @@ export default async function RulesPage({ searchParams }: { searchParams: Promis
       prefill={prefill}
       laws={Object.entries(LAWS).map(([key, l]) => ({ key, ...l }))}
       legal={LEGAL_RULES.map((r) => ({ id: r.id, law: r.law, title: r.title, reference: r.reference, severity: r.severity, appliesWhen: r.appliesWhen, enabled: !off.has(r.id) }))}
-      business={business.map((b) => ({ ...b, appliesTo: b.appliesTo.split(";").filter(Boolean), createdAt: b.createdAt.toISOString(), updatedAt: b.updatedAt.toISOString() }))}
+      business={business.map((b) => ({
+        ...b,
+        appliesTo: b.appliesTo.split(";").filter(Boolean),
+        entities: b.entities.split(";").filter(Boolean),
+        exceptions: parseConditions(b.exceptions),
+        createdAt: b.createdAt.toISOString(),
+        updatedAt: b.updatedAt.toISOString(),
+      }))}
     />
   );
 }

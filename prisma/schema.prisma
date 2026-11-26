@@ -31,6 +31,7 @@ model Document {
   textSource   String   @default("pdf") // pdf | ocr (scanned pages recognised in the browser)
   text         String   @default("")
   pagesJson    String   @default("[]") // string[] of per-page text
+  factsJson    String   @default("{}") // facts a reviewer supplied or corrected: value, months, counterparty, employees
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -84,6 +85,8 @@ model BusinessRule {
   threshold   Float?
   severity    String   @default("medium")
   appliesTo   String   @default("") // semicolon-joined contract types, empty = all
+  entities    String   @default("") // semicolon-joined entities (nudge | delta | spark), empty = all
+  exceptions  String   @default("[]") // JSON: conditions under which the rule does not apply, see src/lib/checks/facts.ts
   guidance    String   @default("")
   enabled     Boolean  @default(true)
   createdAt   DateTime @default(now())
